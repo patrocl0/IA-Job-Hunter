@@ -43,6 +43,9 @@ try {
   tracked=(await request('/api/analyses')).find(x=>x.id===analysisId);
   assert.equal(tracked.tracking.notes,tracking.notes);assert.equal(tracked.tracking.followUpOn,'');
   assert.equal((await request('/api/analyses?followUp=due&today=2026-10-17')).length,0);
+  const paginated=await request('/api/analyses/page?today=2026-10-17&page=1&limit=20');
+  assert.equal(paginated.total,1);assert.equal(paginated.stats.total,1);assert.equal(paginated.items[0].id,analysisId);
+  const filtered=await request('/api/analyses/page?today=2026-10-17&status=Oferta');assert.equal(filtered.total,0);assert.equal(filtered.stats.total,1);
   const vacancies=await request('/api/vacancies/saved');assert.equal(vacancies.total,0);
   console.log('Smoke OK: UI, salud, perfil persistente, importación DOCX, análisis demo y seguimiento.');
 } finally {
