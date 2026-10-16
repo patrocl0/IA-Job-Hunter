@@ -1,3 +1,5 @@
+import { TrackingEditor, isDue, localDay, displayDate } from './TrackingEditor';
+import type { Tracking } from './TrackingEditor';
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
@@ -20,6 +22,7 @@ type Analysis = {
   status: string;
   created_at: string;
   result: Result;
+  tracking?: Tracking;
 };
 const statuses = [
   "Guardada",
@@ -40,6 +43,10 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return response.status === 204 ? (undefined as T) : response.json();
 }
 function App() {
+  const [editing, setEditing] = useState<Analysis | null>(null);
+  const [jobUrl, setJobUrl] = useState('');
+  const [dueOnly, setDueOnly] = useState(false);
+  const [notice, setNotice] = useState('');
   const [mode, setMode] = useState<string>("");
   const [items, setItems] = useState<Analysis[]>([]);
   const [selected, setSelected] = useState<Analysis | null>(null);
@@ -56,7 +63,7 @@ function App() {
     try {
       const [cfg, list] = await Promise.all([
         api<{ mode: string }>("/api/config"),
-        api<Analysis[]>("/api/analyses"),
+        api<Analysis[]>(dueOnly ? `/api/analyses?followUp=due&today=${localDay()}` : "/api/analyses"),
       ]);
       setMode(cfg.mode);
       setItems(list);
@@ -68,7 +75,7 @@ function App() {
   }
   useEffect(() => {
     void load();
-  }, []);
+  }, [dueOnly]);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -76,9 +83,9 @@ function App() {
     try {
       const item = await api<Analysis>("/api/analyses", {
         method: "POST",
-        body: JSON.stringify({ cv, job, title }),
+        body: JSON.stringify({ cv, job, title, tracking: {jobUrl} }),
       });
-      setItems((old) => [item, ...old].slice(0, 100));
+      setItems((old) => dueOnly ? old : [item, ...old].slice(0, 100));
       setSelected(item);
     } catch (e) {
       setError((e as Error).message);
@@ -94,7 +101,7 @@ function App() {
         method: "PATCH",
         body: JSON.stringify({ status }),
       });
-      setItems((old) => old.map((x) => (x.id === next.id ? next : x)));
+      setItems((old) => old.map((x) => (x.id === next.id ? next : x)).filter(x => !dueOnly || isDue(x)));
       if (selected?.id === next.id) setSelected(next);
     } catch (e) {
       setError((e as Error).message);
@@ -169,6 +176,7 @@ function App() {
           const description = `${vacancy.title} — ${vacancy.company}\nUbicación: ${vacancy.location}\nFuente: Remotive\n${vacancy.url}\n\n${vacancy.description}`;
           setTitle(`${vacancy.title} · ${vacancy.company}`.slice(0,160));
           setJob(description);
+          setJobUrl(vacancy.url);
           setError('');
           document.getElementById('job')?.focus();
           return true;
@@ -196,6 +204,8 @@ function App() {
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Frontend Developer · Empresa"
               />
+              <label htmlFor="job-url">Enlace de la oferta (opcional)</label>
+              <input id="job-url" type="url" maxLength={2000} value={jobUrl} onChange={e=>setJobUrl(e.target.value)} placeholder="https://…" />
               <label htmlFor="cv">
                 Tu CV en texto <small>80–16.000 caracteres</small>
               </label>
@@ -295,6 +305,12 @@ function App() {
             )}
           </section>
         </div>
+        {editing && <TrackingEditor key={editing.id} item={editing} onClose={()=>setEditing(null)} onSave={async tracking=>{
+          const next=await api<Analysis>(`/api/analyses/${editing.id}`,{method:'PATCH',body:JSON.stringify({tracking})});
+          setItems(old=>old.map(x=>x.id===next.id?next:x).filter(x=>!dueOnly||isDue(x)));
+          if(selected?.id===next.id)setSelected(next);
+          setEditing(null);setNotice('Seguimiento guardado.');
+        }}/>}
         <section className="panel history">
           <div className="section-head">
             <div>
@@ -313,6 +329,10 @@ function App() {
               </select>
             </label>
           </div>
+          <label className="check"><input type="checkbox" checked={dueOnly} disabled={!!editing || busy || loading} onChange={e=>setDueOnly(e.target.checked)}/>Seguimiento pendiente (hoy y vencidos)</label>
+          <p className="muted">Se usa la fecha de este navegador. Se excluyen estados Oferta y Descartada. Actualiza la fecha o déjala vacía cuando completes el seguimiento.</p>
+          <button type="button" disabled={busy||loading||!!editing} onClick={()=>void load()}>Actualizar lista</button>
+          {notice&&<p role="status" className="success">{notice}</p>}
           {loading ? (
             <p role="status">Cargando oportunidades…</p>
           ) : items.filter((x) => filter === "Todas" || x.status === filter)
@@ -329,6 +349,7 @@ function App() {
                     <th>Oportunidad</th>
                     <th>Compatibilidad</th>
                     <th>Estado</th>
+                    <th>Seguimiento</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
@@ -354,7 +375,7 @@ function App() {
                         <td>
                           <select
                             aria-label={`Estado de ${item.title}`}
-                            disabled={busy}
+                            disabled={busy||!!editing}
                             value={item.status}
                             onChange={(e) => void update(item, e.target.value)}
                           >
@@ -363,7 +384,14 @@ function App() {
                             ))}
                           </select>
                         </td>
+                        <td>
+                          <small>Postulación: {displayDate(item.tracking?.appliedOn)}</small>
+                          <small className={isDue(item)?'import-warning':''}>Próximo: {displayDate(item.tracking?.followUpOn)}{isDue(item)?' · Pendiente':''}</small>
+                          {item.tracking?.jobUrl && /^https?:\/\//i.test(item.tracking.jobUrl) && <a href={item.tracking.jobUrl} target="_blank" rel="noopener noreferrer">Abrir oferta ↗</a>}
+                          {item.tracking?.notes&&<details><summary>Ver notas</summary><p className="preserve tracking-notes">{item.tracking.notes}</p></details>}
+                        </td>
                         <td className="actions">
+                          <button disabled={busy||!!editing} onClick={()=>{setEditing(item);setNotice('');}}>Editar seguimiento</button>
                           <button
                             disabled={busy}
                             onClick={() => setSelected(item)}
@@ -372,7 +400,7 @@ function App() {
                           </button>
                           <button
                             className="delete"
-                            disabled={busy}
+                            disabled={busy||!!editing}
                             onClick={() => void remove(item)}
                           >
                             Eliminar
@@ -385,7 +413,7 @@ function App() {
             </div>
           )}
           <p className="muted">
-            Se muestran las 100 oportunidades más recientes. Cambiar el estado
+            {dueOnly ? "Se muestran hasta 100 seguimientos pendientes, empezando por los más antiguos." : "Se muestran las 100 oportunidades más recientes."} Cambiar el estado
             no envía una postulación.
           </p>
         </section>

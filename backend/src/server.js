@@ -1,3 +1,4 @@
+import { setupTracking, registerTrackingRoutes, validateTracking } from './tracking.js';
 import express from "express";
 import pg from "pg";
 import { readConfig, validateInput, analyze } from "./analyze.js";
@@ -22,6 +23,7 @@ await pool.query(`CREATE TABLE IF NOT EXISTS professional_profile (
   data JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`);
+await setupTracking(pool);
 const vacancies = await setupVacancies(pool);
 const app = express();
 app.disable("x-powered-by");
@@ -39,18 +41,15 @@ app.get("/health", async (_req, res) => {
 });
 app.get("/api/config", (_req, res) => res.json({ mode: config.mode }));
 registerProfileRoutes(app, pool);
-app.get("/api/analyses", async (_req, res) => {
-  const { rows } = await pool.query(
-    "SELECT * FROM analyses ORDER BY created_at DESC, id DESC LIMIT 100",
-  );
-  res.json(rows);
-});
+registerTrackingRoutes(app, pool);
 let active = false;
 let lastRun = 0;
 app.post("/api/analyses", async (req, res) => {
   let input;
+  let tracking;
   try {
     input = validateInput(req.body);
+    tracking = validateTracking(req.body.tracking ?? {});
   } catch (error) {
     return res.status(400).json({ error: error.message });
   }
@@ -64,8 +63,8 @@ app.post("/api/analyses", async (req, res) => {
     const result = await analyze(input, config);
     // Store the result, not the original CV or full vacancy.
     const { rows } = await pool.query(
-      "INSERT INTO analyses(title,result) VALUES($1,$2) RETURNING *",
-      [input.title, result],
+      "INSERT INTO analyses(title,result,tracking) VALUES($1,$2,$3) RETURNING *",
+      [input.title, result, tracking],
     );
     res.status(201).json(rows[0]);
   } catch (error) {
@@ -87,24 +86,6 @@ app.post("/api/analyses", async (req, res) => {
   } finally {
     active = false;
   }
-});
-const statuses = [
-  "Guardada",
-  "Postulada",
-  "Entrevista",
-  "Oferta",
-  "Descartada",
-];
-app.patch("/api/analyses/:id", async (req, res) => {
-  if (!/^\d+$/.test(req.params.id) || !statuses.includes(req.body?.status))
-    return res.status(400).json({ error: "Estado o identificador inválido." });
-  const { rows } = await pool.query(
-    "UPDATE analyses SET status=$1 WHERE id=$2 RETURNING *",
-    [req.body.status, req.params.id],
-  );
-  if (!rows.length)
-    return res.status(404).json({ error: "Análisis no encontrado." });
-  res.json(rows[0]);
 });
 app.delete("/api/analyses/:id", async (req, res) => {
   if (!/^\d+$/.test(req.params.id))

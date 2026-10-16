@@ -83,6 +83,16 @@ docker compose restart web
 
 Guardar una vacante o marcarla como postulada no envía ninguna solicitud. Las vacantes guardadas y el historial de análisis tienen estados independientes.
 
+## Seguimiento de postulaciones
+
+En **Oportunidades guardadas**, pulsa **Editar seguimiento** para guardar el enlace de la oferta, fecha de postulación, próximo seguimiento y notas (hasta 5.000 caracteres). El enlace de una vacante seleccionada se conserva al crear el análisis; también puedes introducirlo manualmente.
+
+El filtro **Seguimiento pendiente** muestra fechas de hoy y vencidas, excluyendo Oferta y Descartada. Usa el día local del navegador, sin convertirlo a UTC. Consulta todos los registros antes de limitar a 100 pendientes, empezando por los más antiguos. Pulsa **Actualizar lista** para refrescar la fecha si mantienes la página abierta de un día a otro.
+
+Cuando completes un seguimiento, cambia la fecha o déjala vacía. El estado y las fechas son independientes: marcar Postulada no inventa una fecha de envío. No se envían recordatorios ni postulaciones automáticamente. Estos campos pertenecen al historial de análisis; la sección Vacantes guardadas mantiene su seguimiento independiente.
+
+Para actualizar una instalación existente, conserva la carpeta y el `.env`, y ejecuta `docker compose up -d --build` seguido de `docker compose restart web`. La API añade una columna JSONB de forma repetible sin borrar registros. No uses `docker compose down -v`.
+
 ## Activar la IA opcional
 
 En `.env`, configura `AI_MODE=openai`, `OPENAI_API_KEY` y `OPENAI_MODEL` con un modelo habilitado en tu cuenta que admita Responses API y Structured Outputs. Después recrea la API y reinicia el proxy:

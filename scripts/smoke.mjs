@@ -31,6 +31,18 @@ try {
   analysisId=analysis.id;assert.equal(analysis.result.mode,'demo');assert.equal(analysis.result.score,null);
   await request('/api/analyses/'+analysisId,json('PATCH',{status:'Postulada'}));
   const list=await request('/api/analyses');assert.equal(list.find(x=>x.id===analysisId).status,'Postulada');
+  const tracking={jobUrl:'https://example.com/jobs/test',appliedOn:'2026-10-10',followUpOn:'2026-10-16',notes:'Nota CI de seguimiento'};
+  await request('/api/analyses/'+analysisId,json('PATCH',{tracking}));
+  let tracked=(await request('/api/analyses')).find(x=>x.id===analysisId);
+  assert.deepEqual(tracked.tracking,tracking);assert.equal(tracked.status,'Postulada');
+  assert.equal((await request('/api/analyses?followUp=due&today=2026-10-15')).length,0);
+  assert.equal((await request('/api/analyses?followUp=due&today=2026-10-16')).length,1);
+  await request('/api/analyses/'+analysisId,json('PATCH',{status:'Oferta'}));
+  assert.equal((await request('/api/analyses?followUp=due&today=2026-10-17')).length,0);
+  await request('/api/analyses/'+analysisId,json('PATCH',{status:'Entrevista',tracking:{followUpOn:''}}));
+  tracked=(await request('/api/analyses')).find(x=>x.id===analysisId);
+  assert.equal(tracked.tracking.notes,tracking.notes);assert.equal(tracked.tracking.followUpOn,'');
+  assert.equal((await request('/api/analyses?followUp=due&today=2026-10-17')).length,0);
   const vacancies=await request('/api/vacancies/saved');assert.equal(vacancies.total,0);
   console.log('Smoke OK: UI, salud, perfil persistente, importación DOCX, análisis demo y seguimiento.');
 } finally {
