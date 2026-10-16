@@ -4,15 +4,17 @@
 
 Aplicación full stack local que reúne un perfil profesional reutilizable, importación de CV en PDF/DOCX, búsqueda de vacantes remotas y seguimiento de oportunidades. Incluye un modo demo sin consumo de IA y una integración opcional con OpenAI para comparar un CV con una vacante.
 
-## Vista previa
+## Interfaz y arquitectura renovadas
 
-Las capturas muestran la interfaz real con **datos ficticios de documentación**. Las ofertas y el perfil de estas imágenes no corresponden a personas ni vacantes activas.
+React + TypeScript + **Tailwind CSS 4 y shadcn/ui**, con navegación lateral, panel de indicadores, formularios por sección y seguimiento paginado. El mismo frontend genera la aplicación local y la demo pública.
 
-![Búsqueda y seguimiento de ejemplo](docs/screenshots/vacantes.png)
+**[Abrir demo de portafolio](https://ai-job-hunter-demo.lilaclamp64.chatgpt.site)** · Datos ficticios, sin IA y almacenamiento en el navegador. Un push a GitHub no publica automáticamente esa demo.
 
-![Perfil profesional editable de ejemplo](docs/screenshots/perfil.png)
+- [Arquitectura explicada y límites de escalabilidad](docs/ARQUITECTURA.md)
+- [Actualizar una instalación existente sin perder datos](docs/ACTUALIZAR-V2.md)
+- [Validación de esta versión](docs/VALIDATION.md)
 
-[Ver la captura móvil](docs/screenshots/movil.png)
+Las capturas de `docs/screenshots` documentan la interfaz anterior; el script de capturas se adaptó a la nueva navegación.
 
 ## Qué resuelve
 
@@ -33,7 +35,7 @@ Evita repetir el mismo CV y dispersar las oportunidades entre pestañas y notas.
 
 | Capa | Tecnología |
 | --- | --- |
-| Interfaz | React + TypeScript + Vite |
+| Interfaz | React + TypeScript + Vite + Tailwind CSS 4 + shadcn/ui |
 | API | Node.js 24 + Express, JavaScript ESM |
 | Datos | PostgreSQL 17 |
 | Documentos | pdf-parse, Mammoth, Multer y workers de Node |
@@ -85,9 +87,9 @@ Guardar una vacante o marcarla como postulada no envía ninguna solicitud. Las v
 
 ## Seguimiento de postulaciones
 
-En **Oportunidades guardadas**, pulsa **Editar seguimiento** para guardar el enlace de la oferta, fecha de postulación, próximo seguimiento y notas (hasta 5.000 caracteres). El enlace de una vacante seleccionada se conserva al crear el análisis; también puedes introducirlo manualmente.
+En **Mis oportunidades**, pulsa **Editar seguimiento** para guardar el enlace de la oferta, fecha de postulación, próximo seguimiento y notas (hasta 5.000 caracteres). El enlace de una vacante seleccionada se conserva al crear el análisis; también puedes introducirlo manualmente.
 
-El filtro **Seguimiento pendiente** muestra fechas de hoy y vencidas, excluyendo Oferta y Descartada. Usa el día local del navegador, sin convertirlo a UTC. Consulta todos los registros antes de limitar a 100 pendientes, empezando por los más antiguos. Pulsa **Actualizar lista** para refrescar la fecha si mantienes la página abierta de un día a otro.
+El filtro **Seguimiento pendiente** muestra fechas de hoy y vencidas, excluyendo Oferta y Descartada. Usa el día local del navegador, sin convertirlo a UTC. Consulta los registros antes de paginar y muestra 20 por página, empezando por los pendientes más antiguos. Pulsa **Actualizar lista** para refrescar la fecha si mantienes la página abierta de un día a otro.
 
 Cuando completes un seguimiento, cambia la fecha o déjala vacía. El estado y las fechas son independientes: marcar Postulada no inventa una fecha de envío. No se envían recordatorios ni postulaciones automáticamente. Estos campos pertenecen al historial de análisis; la sección Vacantes guardadas mantiene su seguimiento independiente.
 
@@ -146,9 +148,14 @@ El script abre la compilación real en un servidor temporal, intercepta las llam
 ## Estructura
 
 ```text
-backend/src/           API, perfil, importación, vacantes y análisis
+backend/src/modules/   Módulos de análisis, perfil, documentos y vacantes
+backend/src/db/        Migraciones versionadas
 backend/test/          Pruebas y documentos sintéticos
-frontend/src/          Interfaz y componentes
+frontend/src/app/      Navegación, panel y composición
+frontend/src/features/ Funciones de la aplicación
+frontend/src/lib/      Adaptador de datos y utilidades
+frontend/src/data/demo/ Adaptador y datos de demostración
+frontend/src/components/ui/ Componentes shadcn/ui
 scripts/               Smoke test y capturas reproducibles
 docs/                  Capturas, validación y guía de presentación
 .github/workflows/     Integración continua

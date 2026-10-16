@@ -1,19 +1,19 @@
-# Verificación de la entrega para portafolio
+# Validación: arquitectura y diseño
 
 | Comprobación | Resultado |
 | --- | --- |
-| ESLint en backend, frontend y scripts | Correcto |
-| Pruebas de lógica, documentos y contratos HTTP | 21 correctas |
-| TypeScript y compilación Vite | Correcto |
-| UI: buscar, guardar oferta y preparar análisis conservando CV | Correcto con API simulada |
-| Ancho móvil a 390 px | Sin desbordamiento horizontal |
-| Capturas de perfil y vacantes | Generadas y revisadas con datos ficticios |
-| Arranque Docker, Nginx y PostgreSQL real | Pendiente de CI; Docker no está disponible en el entorno de preparación |
-| GitHub Actions remoto | Pendiente del primer push; no se ha ejecutado aquí |
-| OpenAI real | No probado en esta entrega; sin consumo de saldo |
+| ESLint | Correcto |
+| Backend | 26 pruebas correctas |
+| Adaptador de demo | 7 pruebas correctas |
+| TypeScript + Vite, build local | Correcto |
+| TypeScript + Vite, build demo | Correcto |
+| Migraciones y consultas: contratos con dependencias simuladas | Correcto |
+| Docker/PostgreSQL real de esta refactorización | Pendiente de GitHub Actions; Docker no disponible en el entorno de preparación |
+| Comprobación visual e importación de navegador del nuevo diseño | Pendiente; herramienta de navegador requerida no disponible |
+| OpenAI real | No ejecutado; no se consumió saldo |
 
-Las capturas se generaron con Chromium y Playwright sobre la compilación real. Los endpoints de API fueron interceptados con fixtures para no acceder a datos personales ni a servicios externos. El script `scripts/screenshots.mjs` incluye las comprobaciones de UI y puede repetirse con `npm run screenshots`.
+La versión anterior sí pasó su pipeline remoto. Ese resultado no acredita esta nueva refactorización. El workflow amplía el smoke test con paginación y estadísticas reales en PostgreSQL y construye las dos variantes de frontend.
 
-El smoke test tiene una protección explícita: exige `SMOKE_ALLOW_WRITES=true`, modo demo y una base sin perfil ni análisis previos. El workflow lo ejecuta en un proyecto Compose temporal, con contraseña aleatoria. El paso final elimina exclusivamente el volumen de ese proyecto de CI. No copies el comando de limpieza con `-v` a tu instalación personal.
+Las capturas existentes en docs/screenshots corresponden al diseño anterior; no son una validación visual del nuevo. Se actualizó el script de capturas para navegar las secciones nuevas, pero no se ejecutó aquí.
 
-La configuración del workflow y las imágenes están preparadas, pero hasta que GitHub Actions finalice no debe afirmarse que el pipeline remoto pasa.
+Vite puede mostrar advertencias por las directivas `use client` de Radix/Lucide en una aplicación enteramente cliente. Las compilaciones terminan correctamente; esas directivas no habilitan renderizado de servidor.

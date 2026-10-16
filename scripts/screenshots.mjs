@@ -29,7 +29,7 @@ try {
     const request=route.request(),url=new URL(request.url());let body;let status=200;
     if(url.pathname==='/api/config')body={mode:'demo'};
     else if(url.pathname==='/api/profile')body={profile,cvText,updatedAt:'2026-10-15T15:00:00Z'};
-    else if(url.pathname==='/api/analyses')body=[];
+    else if(url.pathname==='/api/analyses/page')body={items:[],total:0,page:1,pages:1,stats:{total:0,applied:0,interviews:0,offers:0,due:0}};
     else if(url.pathname==='/api/vacancies')body={jobs,total:jobs.length,page:1,pages:1,fetchedAt:'2026-10-15T15:00:00Z',stale:false,nextRefreshAt:'2026-10-15T21:00:00Z'};
     else if(url.pathname==='/api/vacancies/saved'){
       if(request.method()==='POST'){
@@ -40,13 +40,18 @@ try {
     await route.fulfill({status,contentType:'application/json',body:JSON.stringify(body)});
   });
   await page.goto(origin);await page.getByText('Modo demostración',{exact:true}).waitFor();
+  await mkdir('docs/screenshots',{recursive:true});
+  await page.screenshot({path:'docs/screenshots/dashboard.png',fullPage:true});
+  await page.getByRole('navigation').getByRole('button',{name:'Explorar vacantes',exact:true}).click();
   await page.getByRole('button',{name:'Buscar vacantes',exact:true}).click();
   await page.getByRole('heading',{name:'Ejemplo · Frontend Developer (React)',exact:true}).waitFor();
   await mkdir('docs/screenshots',{recursive:true});
   await page.locator('.vacancy-panel').screenshot({path:'docs/screenshots/vacantes.png'});
+  await page.getByRole('navigation').getByRole('button',{name:'Mi perfil',exact:true}).click();
   await page.locator('.profile-panel summary').click();
   await page.locator('#profile-name').waitFor({state:'visible'});
   await page.locator('.profile-panel').screenshot({path:'docs/screenshots/perfil.png'});
+  await page.getByRole('navigation').getByRole('button',{name:'Explorar vacantes',exact:true}).click();
   await page.getByRole('button',{name:'Guardar vacante',exact:true}).first().click();
   await page.getByRole('heading',{name:'Vacantes guardadas (1)',exact:true}).waitFor();
   await page.getByRole('button',{name:'Preparar análisis',exact:true}).first().click();
@@ -54,6 +59,8 @@ try {
   assert.equal(await page.locator('#cv').inputValue(),cvText);
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'Mobile overflow');
+  await page.getByRole('button',{name:'Abrir navegación',exact:true}).click();
+  await page.getByRole('navigation').getByRole('button',{name:'Explorar vacantes',exact:true}).click();
   await page.locator('.vacancy-panel').screenshot({path:'docs/screenshots/movil.png'});
   assert.deepEqual(errors,[]);
   console.log('Capturas y comprobación UI correctas: búsqueda, guardado, preparación de análisis y ancho móvil. Datos ficticios; ninguna API externa.');

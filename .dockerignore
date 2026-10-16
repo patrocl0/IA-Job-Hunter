@@ -10,3 +10,5 @@ node_modules
 docs
 scripts
 .github
+
+**/dist-demo

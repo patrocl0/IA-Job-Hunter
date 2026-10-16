@@ -1,0 +1,446 @@
+diff --git a/README.md b/README.md
+index 3252ea0..90e41e2 100644
+--- a/README.md
++++ b/README.md
+@@ -83,6 +83,16 @@ docker compose restart web
+ 
+ Guardar una vacante o marcarla como postulada no envía ninguna solicitud. Las vacantes guardadas y el historial de análisis tienen estados independientes.
+ 
++## Seguimiento de postulaciones
++
++En **Oportunidades guardadas**, pulsa **Editar seguimiento** para guardar el enlace de la oferta, fecha de postulación, próximo seguimiento y notas (hasta 5.000 caracteres). El enlace de una vacante seleccionada se conserva al crear el análisis; también puedes introducirlo manualmente.
++
++El filtro **Seguimiento pendiente** muestra fechas de hoy y vencidas, excluyendo Oferta y Descartada. Usa el día local del navegador, sin convertirlo a UTC. Consulta todos los registros antes de limitar a 100 pendientes, empezando por los más antiguos. Pulsa **Actualizar lista** para refrescar la fecha si mantienes la página abierta de un día a otro.
++
++Cuando completes un seguimiento, cambia la fecha o déjala vacía. El estado y las fechas son independientes: marcar Postulada no inventa una fecha de envío. No se envían recordatorios ni postulaciones automáticamente. Estos campos pertenecen al historial de análisis; la sección Vacantes guardadas mantiene su seguimiento independiente.
++
++Para actualizar una instalación existente, conserva la carpeta y el `.env`, y ejecuta `docker compose up -d --build` seguido de `docker compose restart web`. La API añade una columna JSONB de forma repetible sin borrar registros. No uses `docker compose down -v`.
++
+ ## Activar la IA opcional
+ 
+ En `.env`, configura `AI_MODE=openai`, `OPENAI_API_KEY` y `OPENAI_MODEL` con un modelo habilitado en tu cuenta que admita Responses API y Structured Outputs. Después recrea la API y reinicia el proxy:
+diff --git a/backend/src/server.js b/backend/src/server.js
+index a55d08d..90b099e 100644
+--- a/backend/src/server.js
++++ b/backend/src/server.js
+@@ -1,3 +1,4 @@
++import { setupTracking, registerTrackingRoutes, validateTracking } from './tracking.js';
+ import express from "express";
+ import pg from "pg";
+ import { readConfig, validateInput, analyze } from "./analyze.js";
+@@ -22,6 +23,7 @@ await pool.query(`CREATE TABLE IF NOT EXISTS professional_profile (
+   data JSONB NOT NULL,
+   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+ )`);
++await setupTracking(pool);
+ const vacancies = await setupVacancies(pool);
+ const app = express();
+ app.disable("x-powered-by");
+@@ -39,18 +41,15 @@ app.get("/health", async (_req, res) => {
+ });
+ app.get("/api/config", (_req, res) => res.json({ mode: config.mode }));
+ registerProfileRoutes(app, pool);
+-app.get("/api/analyses", async (_req, res) => {
+-  const { rows } = await pool.query(
+-    "SELECT * FROM analyses ORDER BY created_at DESC, id DESC LIMIT 100",
+-  );
+-  res.json(rows);
+-});
++registerTrackingRoutes(app, pool);
+ let active = false;
+ let lastRun = 0;
+ app.post("/api/analyses", async (req, res) => {
+   let input;
++  let tracking;
+   try {
+     input = validateInput(req.body);
++    tracking = validateTracking(req.body.tracking ?? {});
+   } catch (error) {
+     return res.status(400).json({ error: error.message });
+   }
+@@ -64,8 +63,8 @@ app.post("/api/analyses", async (req, res) => {
+     const result = await analyze(input, config);
+     // Store the result, not the original CV or full vacancy.
+     const { rows } = await pool.query(
+-      "INSERT INTO analyses(title,result) VALUES($1,$2) RETURNING *",
+-      [input.title, result],
++      "INSERT INTO analyses(title,result,tracking) VALUES($1,$2,$3) RETURNING *",
++      [input.title, result, tracking],
+     );
+     res.status(201).json(rows[0]);
+   } catch (error) {
+@@ -88,24 +87,6 @@ app.post("/api/analyses", async (req, res) => {
+     active = false;
+   }
+ });
+-const statuses = [
+-  "Guardada",
+-  "Postulada",
+-  "Entrevista",
+-  "Oferta",
+-  "Descartada",
+-];
+-app.patch("/api/analyses/:id", async (req, res) => {
+-  if (!/^\d+$/.test(req.params.id) || !statuses.includes(req.body?.status))
+-    return res.status(400).json({ error: "Estado o identificador inválido." });
+-  const { rows } = await pool.query(
+-    "UPDATE analyses SET status=$1 WHERE id=$2 RETURNING *",
+-    [req.body.status, req.params.id],
+-  );
+-  if (!rows.length)
+-    return res.status(404).json({ error: "Análisis no encontrado." });
+-  res.json(rows[0]);
+-});
+ app.delete("/api/analyses/:id", async (req, res) => {
+   if (!/^\d+$/.test(req.params.id))
+     return res.status(400).json({ error: "Identificador inválido." });
+diff --git a/backend/src/tracking.js b/backend/src/tracking.js
+new file mode 100644
+index 0000000..a982448
+--- /dev/null
++++ b/backend/src/tracking.js
+@@ -0,0 +1,51 @@
++export const statuses = ['Guardada', 'Postulada', 'Entrevista', 'Oferta', 'Descartada'];
++export function validDate(value) {
++  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && value >= '1900-01-01' && value <= '9999-12-31' && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
++}
++export function validateTracking(input) {
++  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Seguimiento inválido.');
++  const result = {};
++  for (const key of Object.keys(input)) {
++    if (!['jobUrl', 'appliedOn', 'followUpOn', 'notes'].includes(key)) throw new Error('Campo de seguimiento desconocido.');
++    if (typeof input[key] !== 'string') throw new Error('El seguimiento debe contener texto.');
++    const value = input[key].trim();
++    if (['appliedOn', 'followUpOn'].includes(key) && value && !validDate(value)) throw new Error('Fecha inválida. Usa AAAA-MM-DD.');
++    if (key === 'notes' && value.length > 5000) throw new Error('Las notas admiten hasta 5.000 caracteres.');
++    if (key === 'jobUrl' && value) {
++      let url;
++      try { url = new URL(value); } catch { throw new Error('El enlace debe ser una URL completa http o https.'); }
++      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || value.length > 2000) throw new Error('Enlace inválido: usa http o https, sin credenciales.');
++    }
++    result[key] = value;
++  }
++  return result;
++}
++export async function setupTracking(pool) {
++  // Additive and repeatable migration; existing rows and results are preserved.
++  await pool.query("ALTER TABLE analyses ADD COLUMN IF NOT EXISTS tracking JSONB NOT NULL DEFAULT '{}'::jsonb");
++}
++export function registerTrackingRoutes(app, pool) {
++  app.get('/api/analyses', async (req, res) => {
++    let sql = 'SELECT * FROM analyses';
++    const args = [];
++    if (req.query.followUp !== undefined) {
++      if (req.query.followUp !== 'due' || !validDate(req.query.today)) return res.status(400).json({error: 'Filtro o fecha inválidos.'});
++      // ISO calendar dates, not timestamps: the browser supplies its local day.
++      sql += " WHERE status NOT IN ('Oferta','Descartada') AND COALESCE(tracking->>'followUpOn','') <> '' AND tracking->>'followUpOn' <= $1 ORDER BY tracking->>'followUpOn' ASC, id DESC LIMIT 100";
++      args.push(req.query.today);
++    } else sql += ' ORDER BY created_at DESC, id DESC LIMIT 100';
++    res.json((await pool.query(sql, args)).rows);
++  });
++  app.patch('/api/analyses/:id', async (req, res) => {
++    let tracking;
++    try {
++      if (!/^[1-9]\d{0,18}$/.test(req.params.id) || BigInt(req.params.id) > 9223372036854775807n) throw new Error('Identificador inválido.');
++      if (!req.body || Array.isArray(req.body) || typeof req.body !== 'object' || !Object.keys(req.body).length || Object.keys(req.body).some(k => !['status', 'tracking'].includes(k))) throw new Error('Actualización inválida.');
++      if ('status' in req.body && !statuses.includes(req.body.status)) throw new Error('Estado inválido.');
++      tracking = 'tracking' in req.body ? validateTracking(req.body.tracking) : {};
++    } catch (error) { return res.status(400).json({error: error.message}); }
++    const { rows } = await pool.query('UPDATE analyses SET status=COALESCE($1::text,status), tracking=tracking || $2::jsonb WHERE id=$3 RETURNING *', [req.body.status ?? null, JSON.stringify(tracking), req.params.id]);
++    if (!rows.length) return res.status(404).json({error:'Análisis no encontrado.'});
++    res.json(rows[0]);
++  });
++}
+diff --git a/backend/test/tracking.test.js b/backend/test/tracking.test.js
+new file mode 100644
+index 0000000..6a90d34
+--- /dev/null
++++ b/backend/test/tracking.test.js
+@@ -0,0 +1,24 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import express from 'express';
++import { validateTracking, validDate, registerTrackingRoutes } from '../src/tracking.js';
++test('Tracking validates calendar dates, links, lengths and field clearing',()=>{
++ assert.ok(validDate('2024-02-29'));assert.ok(!validDate('2025-02-29'));assert.ok(!validDate('2026-04-31'));assert.ok(!validDate('2026-1-01'));assert.ok(!validDate('0000-01-01'));
++ assert.deepEqual(validateTracking({notes:'  Contactar mañana  ',followUpOn:'',jobUrl:'https://example.com/job'}),{notes:'Contactar mañana',followUpOn:'',jobUrl:'https://example.com/job'});
++ for(const input of [{jobUrl:'javascript:alert(1)'},{jobUrl:'ftp://example.com'},{jobUrl:'https://user:pass@example.com'},{notes:'x'.repeat(5001)},{notes:null},{followUpOn:'2026-02-30'},{unknown:'x'},[]])assert.throws(()=>validateTracking(input));
++});
++test('HTTP tracking: partial edits preserve status and fields, due query precedes limit',async()=>{
++ let row={id:'1',status:'Postulada',tracking:{notes:'Nota anterior',appliedOn:'2026-10-10',followUpOn:'2026-10-16'},result:{mode:'demo'}};let lastQuery;
++ const pool={query:async(sql,args)=>{lastQuery={sql,args};if(sql.startsWith('UPDATE')){if(args[2]!=='1')return {rows:[]};row={...row,status:args[0]??row.status,tracking:{...row.tracking,...JSON.parse(args[1])}};}return {rows:[structuredClone(row)]};}};
++ const app=express();app.use(express.json());registerTrackingRoutes(app,pool);const server=app.listen(0,'127.0.0.1');await new Promise(r=>server.once('listening',r));const base=`http://127.0.0.1:${server.address().port}`;
++ const patch=(body,id='1')=>fetch(base+'/api/analyses/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
++ try{
++  let res=await patch({tracking:{notes:'Actualizada'}});assert.equal(res.status,200);let data=await res.json();assert.equal(data.status,'Postulada');assert.equal(data.tracking.appliedOn,'2026-10-10');assert.equal(data.tracking.notes,'Actualizada');
++  data=await (await patch({status:'Entrevista'})).json();assert.equal(data.tracking.notes,'Actualizada');
++  data=await (await patch({tracking:{followUpOn:''}})).json();assert.equal(data.tracking.followUpOn,'');assert.equal(data.status,'Entrevista');
++  for(const body of [{},{status:'bad'},{tracking:{followUpOn:'2026-02-30'}},{title:'unexpected'}])assert.equal((await patch(body)).status,400);
++  assert.equal((await patch({status:'Oferta'},'2')).status,404);assert.equal((await patch({status:'Oferta'},'99999999999999999999')).status,400);
++  assert.equal((await fetch(base+'/api/analyses?followUp=due&today=2026-02-30')).status,400);
++  assert.equal((await fetch(base+'/api/analyses?followUp=due&today=2026-10-16')).status,200);assert.deepEqual(lastQuery.args,['2026-10-16']);assert.match(lastQuery.sql,/WHERE.*NOT IN.*<= \$1 ORDER BY.*LIMIT 100/);
++ }finally{await new Promise(r=>server.close(r));}
++});
+diff --git a/docs/SEGUIMIENTO.md b/docs/SEGUIMIENTO.md
+new file mode 100644
+index 0000000..6bab30d
+--- /dev/null
++++ b/docs/SEGUIMIENTO.md
+@@ -0,0 +1,37 @@
++# Actualización: seguimiento de postulaciones
++
++## Instalación
++
++Esta actualización corresponde a la aplicación local. La demo pública se mantiene separada.
++
++Copia el parche descargado a la raíz del proyecto y, desde esa carpeta, ejecuta:
++
++```bash
++git apply --check AI-Job-Hunter-Seguimiento.patch
++git apply AI-Job-Hunter-Seguimiento.patch
++docker compose up -d --build
++docker compose restart web
++```
++
++Si la comprobación informa conflictos, no fuerces la aplicación: revisa las diferencias con tus cambios locales. Conserva tu `.env` y tu carpeta de proyecto. No uses `docker compose down -v`.
++
++La API añade `analyses.tracking` como JSONB con valor vacío por defecto; la migración puede repetirse y conserva los análisis existentes. No cambian las dependencias. Los campos se guardan en PostgreSQL y no se envían a OpenAI.
++
++## Prueba manual
++
++1. Abre un análisis existente y pulsa Editar seguimiento.
++2. Añade un enlace https, fecha de postulación, próximo seguimiento de hoy y notas; guarda.
++3. Recarga la página: deben conservarse los cuatro campos.
++4. Activa Seguimiento pendiente: debe aparecer.
++5. Cambia su estado a Oferta: debe salir de pendientes.
++6. Vuelve a Todas, cambia a Entrevista y borra la fecha de seguimiento: no debe aparecer en pendientes.
++7. Comprueba también un análisis nuevo preparado desde una vacante: su enlace debe conservarse.
++
++Las fechas no cambian automáticamente al elegir un estado. Oferta y Descartada se consideran fuera de seguimiento pendiente. Vacantes guardadas y el historial de análisis continúan siendo listas independientes.
++
++## Validación de esta actualización
++
++- ESLint y TypeScript/Vite: correctos.
++- 23 pruebas de backend: correctas, incluyendo fechas reales, URLs, borrado de campos y contrato HTTP de cambios parciales.
++- Smoke test ampliado para comprobar persistencia y filtro con PostgreSQL real cuando se ejecute CI.
++- Docker/PostgreSQL y comprobación visual no ejecutados en el entorno de preparación de esta actualización.
+diff --git a/frontend/src/TrackingEditor.tsx b/frontend/src/TrackingEditor.tsx
+new file mode 100644
+index 0000000..c168495
+--- /dev/null
++++ b/frontend/src/TrackingEditor.tsx
+@@ -0,0 +1,22 @@
++import { useEffect, useState } from 'react';
++export type Tracking = {jobUrl?:string;appliedOn?:string;followUpOn?:string;notes?:string};
++export function localDay(date=new Date()) {return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`;}
++export function isDue(item:{status:string;tracking?:Tracking}) {return !!item.tracking?.followUpOn && item.tracking.followUpOn<=localDay() && !['Oferta','Descartada'].includes(item.status);}
++export function displayDate(day?:string) {return day ? day.split('-').reverse().join('/') : 'Sin fecha';}
++export function TrackingEditor({item,onSave,onClose}:{item:{id:string;title:string;tracking?:Tracking};onSave:(tracking:Tracking)=>Promise<void>;onClose:()=>void}) {
++ const [draft,setDraft]=useState<Tracking>({jobUrl:'',appliedOn:'',followUpOn:'',notes:'',...item.tracking});
++ const [busy,setBusy]=useState(false);const [error,setError]=useState('');
++ const dirty=Object.entries(draft).some(([k,v])=>v!==(item.tracking?.[k as keyof Tracking]??''));
++ useEffect(()=>{if(!dirty)return;const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
++ return <section className="panel tracking-editor" aria-labelledby="tracking-title"><h2 id="tracking-title">Seguimiento · {item.title}</h2>
++ <p className="muted">Guarda enlaces, fechas y notas para esta oportunidad. No se envían mensajes ni recordatorios automáticos.</p>
++ <form onSubmit={async e=>{e.preventDefault();setBusy(true);setError('');try{await onSave(draft);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>
++ <fieldset disabled={busy} className="profile-fields"><legend className="sr-only">Datos de seguimiento</legend>
++ <div className="wide"><label htmlFor="tracking-url">Enlace de la oferta</label><input autoFocus id="tracking-url" type="url" maxLength={2000} placeholder="https://…" value={draft.jobUrl} onChange={e=>setDraft({...draft,jobUrl:e.target.value})}/></div>
++ <div><label htmlFor="tracking-applied">Fecha de postulación</label><input id="tracking-applied" type="date" min="1900-01-01" max="9999-12-31" value={draft.appliedOn} onChange={e=>setDraft({...draft,appliedOn:e.target.value})}/></div>
++ <div><label htmlFor="tracking-next">Próximo seguimiento</label><input id="tracking-next" type="date" min="1900-01-01" max="9999-12-31" value={draft.followUpOn} onChange={e=>setDraft({...draft,followUpOn:e.target.value})}/></div>
++ <div className="wide"><label htmlFor="tracking-notes">Notas</label><textarea id="tracking-notes" rows={5} maxLength={5000} value={draft.notes} onChange={e=>setDraft({...draft,notes:e.target.value})} placeholder="Contacto, entrevista, próximos pasos…"/><small>{draft.notes?.length??0}/5.000 caracteres</small></div></fieldset>
++ {error&&<p role="alert" className="error">{error}</p>}
++ <div className="profile-actions"><button className="primary" disabled={busy||!dirty}>{busy?'Guardando…':'Guardar seguimiento'}</button><button type="button" disabled={busy} onClick={()=>{if(!dirty||window.confirm('¿Descartar los cambios de seguimiento sin guardar?'))onClose();}}>Cerrar</button></div>
++ </form></section>;
++}
+diff --git a/frontend/src/main.tsx b/frontend/src/main.tsx
+index e44091c..b929147 100644
+--- a/frontend/src/main.tsx
++++ b/frontend/src/main.tsx
+@@ -1,3 +1,5 @@
++import { TrackingEditor, isDue, localDay, displayDate } from './TrackingEditor';
++import type { Tracking } from './TrackingEditor';
+ import React, { useEffect, useState } from "react";
+ import { createRoot } from "react-dom/client";
+ import "./style.css";
+@@ -20,6 +22,7 @@ type Analysis = {
+   status: string;
+   created_at: string;
+   result: Result;
++  tracking?: Tracking;
+ };
+ const statuses = [
+   "Guardada",
+@@ -40,6 +43,10 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
+   return response.status === 204 ? (undefined as T) : response.json();
+ }
+ function App() {
++  const [editing, setEditing] = useState<Analysis | null>(null);
++  const [jobUrl, setJobUrl] = useState('');
++  const [dueOnly, setDueOnly] = useState(false);
++  const [notice, setNotice] = useState('');
+   const [mode, setMode] = useState<string>("");
+   const [items, setItems] = useState<Analysis[]>([]);
+   const [selected, setSelected] = useState<Analysis | null>(null);
+@@ -56,7 +63,7 @@ function App() {
+     try {
+       const [cfg, list] = await Promise.all([
+         api<{ mode: string }>("/api/config"),
+-        api<Analysis[]>("/api/analyses"),
++        api<Analysis[]>(dueOnly ? `/api/analyses?followUp=due&today=${localDay()}` : "/api/analyses"),
+       ]);
+       setMode(cfg.mode);
+       setItems(list);
+@@ -68,7 +75,7 @@ function App() {
+   }
+   useEffect(() => {
+     void load();
+-  }, []);
++  }, [dueOnly]);
+   async function submit(event: React.FormEvent) {
+     event.preventDefault();
+     setBusy(true);
+@@ -76,9 +83,9 @@ function App() {
+     try {
+       const item = await api<Analysis>("/api/analyses", {
+         method: "POST",
+-        body: JSON.stringify({ cv, job, title }),
++        body: JSON.stringify({ cv, job, title, tracking: {jobUrl} }),
+       });
+-      setItems((old) => [item, ...old].slice(0, 100));
++      setItems((old) => dueOnly ? old : [item, ...old].slice(0, 100));
+       setSelected(item);
+     } catch (e) {
+       setError((e as Error).message);
+@@ -94,7 +101,7 @@ function App() {
+         method: "PATCH",
+         body: JSON.stringify({ status }),
+       });
+-      setItems((old) => old.map((x) => (x.id === next.id ? next : x)));
++      setItems((old) => old.map((x) => (x.id === next.id ? next : x)).filter(x => !dueOnly || isDue(x)));
+       if (selected?.id === next.id) setSelected(next);
+     } catch (e) {
+       setError((e as Error).message);
+@@ -169,6 +176,7 @@ function App() {
+           const description = `${vacancy.title} — ${vacancy.company}\nUbicación: ${vacancy.location}\nFuente: Remotive\n${vacancy.url}\n\n${vacancy.description}`;
+           setTitle(`${vacancy.title} · ${vacancy.company}`.slice(0,160));
+           setJob(description);
++          setJobUrl(vacancy.url);
+           setError('');
+           document.getElementById('job')?.focus();
+           return true;
+@@ -196,6 +204,8 @@ function App() {
+                 onChange={(e) => setTitle(e.target.value)}
+                 placeholder="Frontend Developer · Empresa"
+               />
++              <label htmlFor="job-url">Enlace de la oferta (opcional)</label>
++              <input id="job-url" type="url" maxLength={2000} value={jobUrl} onChange={e=>setJobUrl(e.target.value)} placeholder="https://…" />
+               <label htmlFor="cv">
+                 Tu CV en texto <small>80–16.000 caracteres</small>
+               </label>
+@@ -295,6 +305,12 @@ function App() {
+             )}
+           </section>
+         </div>
++        {editing && <TrackingEditor key={editing.id} item={editing} onClose={()=>setEditing(null)} onSave={async tracking=>{
++          const next=await api<Analysis>(`/api/analyses/${editing.id}`,{method:'PATCH',body:JSON.stringify({tracking})});
++          setItems(old=>old.map(x=>x.id===next.id?next:x).filter(x=>!dueOnly||isDue(x)));
++          if(selected?.id===next.id)setSelected(next);
++          setEditing(null);setNotice('Seguimiento guardado.');
++        }}/>}
+         <section className="panel history">
+           <div className="section-head">
+             <div>
+@@ -313,6 +329,10 @@ function App() {
+               </select>
+             </label>
+           </div>
++          <label className="check"><input type="checkbox" checked={dueOnly} disabled={!!editing || busy || loading} onChange={e=>setDueOnly(e.target.checked)}/>Seguimiento pendiente (hoy y vencidos)</label>
++          <p className="muted">Se usa la fecha de este navegador. Se excluyen estados Oferta y Descartada. Actualiza la fecha o déjala vacía cuando completes el seguimiento.</p>
++          <button type="button" disabled={busy||loading||!!editing} onClick={()=>void load()}>Actualizar lista</button>
++          {notice&&<p role="status" className="success">{notice}</p>}
+           {loading ? (
+             <p role="status">Cargando oportunidades…</p>
+           ) : items.filter((x) => filter === "Todas" || x.status === filter)
+@@ -329,6 +349,7 @@ function App() {
+                     <th>Oportunidad</th>
+                     <th>Compatibilidad</th>
+                     <th>Estado</th>
++                    <th>Seguimiento</th>
+                     <th>Acciones</th>
+                   </tr>
+                 </thead>
+@@ -354,7 +375,7 @@ function App() {
+                         <td>
+                           <select
+                             aria-label={`Estado de ${item.title}`}
+-                            disabled={busy}
++                            disabled={busy||!!editing}
+                             value={item.status}
+                             onChange={(e) => void update(item, e.target.value)}
+                           >
+@@ -363,7 +384,14 @@ function App() {
+                             ))}
+                           </select>
+                         </td>
++                        <td>
++                          <small>Postulación: {displayDate(item.tracking?.appliedOn)}</small>
++                          <small className={isDue(item)?'import-warning':''}>Próximo: {displayDate(item.tracking?.followUpOn)}{isDue(item)?' · Pendiente':''}</small>
++                          {item.tracking?.jobUrl && /^https?:\/\//i.test(item.tracking.jobUrl) && <a href={item.tracking.jobUrl} target="_blank" rel="noopener noreferrer">Abrir oferta ↗</a>}
++                          {item.tracking?.notes&&<details><summary>Ver notas</summary><p className="preserve tracking-notes">{item.tracking.notes}</p></details>}
++                        </td>
+                         <td className="actions">
++                          <button disabled={busy||!!editing} onClick={()=>{setEditing(item);setNotice('');}}>Editar seguimiento</button>
+                           <button
+                             disabled={busy}
+                             onClick={() => setSelected(item)}
+@@ -372,7 +400,7 @@ function App() {
+                           </button>
+                           <button
+                             className="delete"
+-                            disabled={busy}
++                            disabled={busy||!!editing}
+                             onClick={() => void remove(item)}
+                           >
+                             Eliminar
+@@ -385,7 +413,7 @@ function App() {
+             </div>
+           )}
+           <p className="muted">
+-            Se muestran las 100 oportunidades más recientes. Cambiar el estado
++            {dueOnly ? "Se muestran hasta 100 seguimientos pendientes, empezando por los más antiguos." : "Se muestran las 100 oportunidades más recientes."} Cambiar el estado
+             no envía una postulación.
+           </p>
+         </section>
+diff --git a/frontend/src/style.css b/frontend/src/style.css
+index a72597c..042bb3e 100644
+--- a/frontend/src/style.css
++++ b/frontend/src/style.css
+@@ -5,3 +5,5 @@
+ .import-cv{border:1px solid #dce6e0;background:#f7faf8;border-radius:12px;padding:18px;margin-bottom:24px}.import-cv h3{margin-top:0}.import-cv input[type=file]{padding:10px;max-width:100%;min-width:0;font-size:12px}.import-cv>button{margin-top:12px}.import-preview{margin-top:20px;border-top:1px solid #dce6e0;padding-top:12px}.import-warning{color:#855215;font-size:12px;line-height:1.6;background:#fff6e5;padding:10px;border-radius:6px}.import-preview textarea{background:white}
+ 
+ .vacancy-panel{margin-bottom:24px}.vacancy-filters{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}.vacancy-filters label{margin-top:8px}.vacancy-filters .check{display:flex;align-items:center;gap:10px;font-weight:400;font-size:12px}.check input{width:auto}.vacancy-filters .primary{align-self:end}.vacancy-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px}.vacancy-card{border:1px solid #dce5e1;border-radius:12px;padding:20px;min-width:0}.vacancy-card h3{font-size:18px;line-height:1.4;margin:8px 0;overflow-wrap:anywhere}.vacancy-location{font-size:13px;color:#4c6d59}.vacancy-description{max-height:300px;overflow:auto;overflow-wrap:anywhere;font-size:13px}.vacancy-actions{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:14px}.vacancy-actions label{margin:0}.vacancy-actions select{display:block;margin-top:6px}.source-link{font-size:13px;color:#245f42}.pagination{display:flex;gap:14px;align-items:center;justify-content:center;font-size:12px;margin-top:20px}.saved-heading{display:flex;align-items:center;justify-content:space-between;border-top:1px solid #dce5e1;margin-top:28px;padding-top:18px;gap:12px}@media(max-width:750px){.vacancy-grid,.vacancy-filters{grid-template-columns:1fr}.vacancy-filters .primary{margin-top:8px}}
++
++.tracking-notes{max-width:340px;overflow-wrap:anywhere}.tracking-editor{margin:24px 0}.tracking-editor input[type="date"]{min-width:0}
+diff --git a/scripts/smoke.mjs b/scripts/smoke.mjs
+index 268295f..2357991 100644
+--- a/scripts/smoke.mjs
++++ b/scripts/smoke.mjs
+@@ -31,6 +31,18 @@ try {
+   analysisId=analysis.id;assert.equal(analysis.result.mode,'demo');assert.equal(analysis.result.score,null);
+   await request('/api/analyses/'+analysisId,json('PATCH',{status:'Postulada'}));
+   const list=await request('/api/analyses');assert.equal(list.find(x=>x.id===analysisId).status,'Postulada');
++  const tracking={jobUrl:'https://example.com/jobs/test',appliedOn:'2026-10-10',followUpOn:'2026-10-16',notes:'Nota CI de seguimiento'};
++  await request('/api/analyses/'+analysisId,json('PATCH',{tracking}));
++  let tracked=(await request('/api/analyses')).find(x=>x.id===analysisId);
++  assert.deepEqual(tracked.tracking,tracking);assert.equal(tracked.status,'Postulada');
++  assert.equal((await request('/api/analyses?followUp=due&today=2026-10-15')).length,0);
++  assert.equal((await request('/api/analyses?followUp=due&today=2026-10-16')).length,1);
++  await request('/api/analyses/'+analysisId,json('PATCH',{status:'Oferta'}));
++  assert.equal((await request('/api/analyses?followUp=due&today=2026-10-17')).length,0);
++  await request('/api/analyses/'+analysisId,json('PATCH',{status:'Entrevista',tracking:{followUpOn:''}}));
++  tracked=(await request('/api/analyses')).find(x=>x.id===analysisId);
++  assert.equal(tracked.tracking.notes,tracking.notes);assert.equal(tracked.tracking.followUpOn,'');
++  assert.equal((await request('/api/analyses?followUp=due&today=2026-10-17')).length,0);
+   const vacancies=await request('/api/vacancies/saved');assert.equal(vacancies.total,0);
+   console.log('Smoke OK: UI, salud, perfil persistente, importación DOCX, análisis demo y seguimiento.');
+ } finally {
