@@ -105,7 +105,7 @@ La ejecución local de esta entrega no incluye Docker ni una revisión visual de
 
 ## Alcance y siguientes pasos
 
-Esta versión no incluye verificación de correo, recuperación de contraseña por email, cambio de contraseña, MFA, administración de usuarios ni eliminación de cuentas. El registro es para una instalación controlada. No se afirma que sea un SaaS listo para publicación masiva.
+La actualización posterior añade cambio de contraseña y recuperación administrativa local: consulta [CONTRASENAS.md](CONTRASENAS.md). No incluye verificación de correo, recuperación por email, MFA, administración de usuarios ni eliminación de cuentas. El registro es para una instalación controlada. No se afirma que sea un SaaS listo para publicación masiva.
 
 Antes de abrir un servicio a Internet: HTTPS y proxy confiable, verificación/recuperación por correo, límites por cuenta para consumo de IA/importación, gestión de abuso, copias y recuperación probadas, observabilidad y pruebas de carga. Los análisis y la importación mantienen sus límites de concurrencia existentes por proceso. El aislamiento se realiza en consultas explícitas; no se ha añadido PostgreSQL Row-Level Security.
 

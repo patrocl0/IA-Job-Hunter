@@ -1,5 +1,7 @@
 # AI Job Hunter
 
+**Cambio de contraseña y recuperación local:** consulta [la guía de contraseñas](docs/CONTRASENAS.md) para instalar esta actualización y recuperar el acceso desde la terminal. No requiere cambios de `.env` ni una nueva migración de base de datos.
+
 ## Actualización: cuentas y sesiones
 
 La instalación local ahora requiere iniciar sesión. El registro está cerrado por defecto y se puede habilitar con `ALLOW_REGISTRATION=true`. Los datos anteriores se reservan para una cuenta propietaria que se activa desde la terminal. **Lee [la guía de cuentas y actualización](docs/CUENTAS-Y-SESIONES.md) antes de reconstruir los contenedores.** La demo pública continúa sin cuentas reales.

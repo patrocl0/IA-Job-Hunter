@@ -1,3 +1,7 @@
+# Cambio y recuperación de contraseña
+
+33 pruebas de backend y 9 de frontend aprobadas; lint y ambas compilaciones correctos. Las pruebas nuevas cubren cambio HTTP, recuperación local, revocación de sesiones y rollback. El smoke de Docker se amplió y debe ejecutarse en el CI nuevo. Detalles en [CONTRASENAS.md](CONTRASENAS.md). No se realizó revisión visual en navegador en esta entrega.
+
 # Actualización de autenticación
 
 La entrega de cuentas incorpora pruebas HTTP con SQL real en PGlite, migración de datos anteriores y aislamiento entre usuarios. Consulta [CUENTAS-Y-SESIONES.md](CUENTAS-Y-SESIONES.md). Las cifras y ejecuciones de la sección siguiente pertenecen a la entrega anterior. El nuevo CI con PostgreSQL/Nginx debe ejecutarse tras subir la rama.
