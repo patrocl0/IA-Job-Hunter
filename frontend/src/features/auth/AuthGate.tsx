@@ -17,6 +17,7 @@ const announce = () => {
 export function AuthGate() {
   const [session, setSession] = useState<Session | null>(null);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
   const [register, setRegister] = useState(false);
   const [email, setEmail] = useState('');
@@ -70,12 +71,24 @@ export function AuthGate() {
       }));
       setPassword('');
       setConfirmation('');
+      setNotice('');
       announce();
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
+  }
+  function passwordChanged() {
+    setSession((current) => (current ? { ...current, user: null } : null));
+    setPassword('');
+    setConfirmation('');
+    setError('');
+    setRegister(false);
+    setNotice(
+      'Contraseña actualizada. Todas tus sesiones se cerraron. Inicia sesión con la nueva contraseña.',
+    );
+    announce();
   }
   async function logout() {
     if (!window.confirm('¿Cerrar sesión? Los cambios que no hayas guardado se perderán.')) return;
@@ -86,6 +99,7 @@ export function AuthGate() {
       setSession((current) => (current ? { ...current, user: null } : null));
       setPassword('');
       setConfirmation('');
+      setNotice('');
       announce();
     } catch (e) {
       setError((e as Error).message);
@@ -106,6 +120,7 @@ export function AuthGate() {
           accountEmail={session.user.email}
           onLogout={() => void logout()}
           logoutBusy={busy}
+          onPasswordChanged={passwordChanged}
         />
       </>
     );
@@ -124,6 +139,11 @@ export function AuthGate() {
         </div>
         <Card>
           <CardContent className="pt-6">
+            {notice && (
+              <p role="status" className="success mb-4">
+                {notice}
+              </p>
+            )}
             {error && (
               <p role="alert" className="error mb-4">
                 {error}
@@ -187,6 +207,21 @@ export function AuthGate() {
                   {register ? <UserPlus size={16} /> : <LogIn size={16} />}{' '}
                   {busy ? 'Un momento…' : register ? 'Crear cuenta' : 'Iniciar sesión'}
                 </Button>
+                {!register && (
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-primary">
+                      ¿Olvidaste tu contraseña?
+                    </summary>
+                    <p className="mt-3 leading-6 text-muted-foreground">
+                      Esta instalación utiliza recuperación local. Si administras la aplicación,
+                      ejecuta el comando de recuperación desde la terminal del proyecto. Si otra
+                      persona la administra, pídele ayuda. No se envían correos de recuperación.
+                    </p>
+                    <code className="mt-3 block break-words rounded-md bg-muted p-3 text-xs">
+                      docker compose exec api node backend/src/modules/auth/reset-password.js
+                    </code>
+                  </details>
+                )}
                 {session.registration && (
                   <Button
                     type="button"

@@ -9,9 +9,12 @@ export function credentials(body) {
   const password = body?.password;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254)
     throw new Error('Introduce un correo válido.');
+  validatePassword(password);
+  return { email, password };
+}
+export function validatePassword(password) {
   if (typeof password !== 'string' || password.length < 12 || Buffer.byteLength(password) > 256)
     throw new Error('Usa una contraseña de al menos 12 caracteres y como máximo 256 bytes.');
-  return { email, password };
 }
 export async function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');

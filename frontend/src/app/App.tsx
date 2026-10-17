@@ -1,3 +1,4 @@
+import { PasswordDialog } from '@/features/auth/PasswordDialog';
 import { Sidebar } from './Sidebar';
 import { Dashboard } from './Dashboard';
 import { navigation, type Page } from './navigation';
@@ -16,10 +17,12 @@ export default function App({
   accountEmail,
   onLogout,
   logoutBusy,
+  onPasswordChanged,
 }: {
   accountEmail?: string;
   onLogout?: () => void;
   logoutBusy?: boolean;
+  onPasswordChanged?: () => void;
 }) {
   const [page, setPage] = useState<Page>('overview'),
     [mobile, setMobile] = useState(false),
@@ -52,7 +55,7 @@ export default function App({
       </a>
       <Sidebar mobile={mobile} setMobile={setMobile} go={go} page={page} stats={stats} />
       <div className="lg:pl-64">
-        <header className="flex min-h-20 items-center justify-between gap-3 border-b bg-card/90 px-5 md:px-9">
+        <header className="flex min-h-20 flex-wrap py-3 md:flex-nowrap items-center justify-between gap-3 border-b bg-card/90 px-5 md:px-9">
           <div className="flex items-center gap-3">
             <Button
               variant="ghost"
@@ -70,6 +73,9 @@ export default function App({
             </span>
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            {onPasswordChanged && (
+              <PasswordDialog onChanged={onPasswordChanged} disabled={logoutBusy} />
+            )}
             {onLogout && (
               <Button variant="ghost" size="sm" disabled={logoutBusy} onClick={onLogout}>
                 Cerrar sesión

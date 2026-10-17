@@ -19,7 +19,10 @@ export async function requestResponse(url: string, init?: RequestInit): Promise<
     credentials: 'same-origin',
     signal: init?.signal ?? AbortSignal.timeout(65000),
   });
-  if (response.status === 401 && !url.startsWith('/api/auth/'))
+  if (
+    response.status === 401 &&
+    !['/api/auth/login', '/api/auth/register', '/api/auth/session'].includes(url.split('?')[0])
+  )
     window.dispatchEvent(new Event('jobhunter:session-expired'));
   return response;
 }

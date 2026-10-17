@@ -14,11 +14,23 @@ export function createAuthService(pool) {
       );
       return rows[0].attempts > limit;
     },
-    async createSession(userId, oldToken) {
+    async createSession(userId, oldToken, verifiedPasswordHash) {
       const token = randomBytes(32).toString('hex');
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+        const { rows } = await client.query(
+          'SELECT password_hash FROM users WHERE id=$1 FOR UPDATE',
+          [userId],
+        );
+        if (!verifiedPasswordHash || rows[0]?.password_hash !== verifiedPasswordHash) {
+          const error = new Error(
+            'La cuenta cambió durante el acceso. Intenta iniciar sesión de nuevo.',
+          );
+          error.status = 401;
+          throw error;
+        }
+
         if (oldToken)
           await client.query('DELETE FROM auth_sessions WHERE token_hash=$1', [
             tokenHash(oldToken),

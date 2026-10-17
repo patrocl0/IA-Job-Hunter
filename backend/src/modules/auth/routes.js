@@ -1,3 +1,4 @@
+import { changePassword, PasswordChangeError } from './password-change.js';
 import { credentials, hashPassword, verifyPassword } from './passwords.js';
 import { createAuthService, sessionAge } from './service.js';
 export function readAuthConfig(env = {}) {
@@ -60,8 +61,10 @@ export function registerAuth(app, pool, config = readAuthConfig()) {
       if (await service.limited('email:' + input.email, 10))
         return res.status(429).json({ error: 'Demasiados intentos. Espera 15 minutos.' });
       let user;
+      let verifiedPasswordHash;
       if (action === 'register') {
         const hash = await hashPassword(input.password);
+        verifiedPasswordHash = hash;
         const result = await pool.query(
           'INSERT INTO users(email,password_hash) VALUES($1,$2) ON CONFLICT(email) DO NOTHING RETURNING id,email',
           [input.email, hash],
@@ -79,8 +82,15 @@ export function registerAuth(app, pool, config = readAuthConfig()) {
         if (!(await verifyPassword(input.password, rows[0]?.password_hash)))
           return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
         user = { id: rows[0].id, email: rows[0].email };
+        verifiedPasswordHash = rows[0].password_hash;
       }
-      const value = await service.createSession(user.id, token(req));
+      let value;
+      try {
+        value = await service.createSession(user.id, token(req), verifiedPasswordHash);
+      } catch (error) {
+        if (error.status === 401) return res.status(401).json({ error: error.message });
+        throw error;
+      }
       res.cookie(cookieName, value, { ...cookieOptions, maxAge: sessionAge });
       res.status(action === 'register' ? 201 : 200).json({ user });
     });
@@ -95,6 +105,19 @@ export function registerAuth(app, pool, config = readAuthConfig()) {
     if (!user) return res.status(401).json({ error: 'Inicia sesión para continuar.' });
     req.user = user;
     next();
+  });
+  app.post('/api/auth/password', async (req, res) => {
+    if (await service.limited('password-change:' + req.user.id, 10))
+      return res.status(429).json({ error: 'Demasiados intentos. Espera 15 minutos.' });
+    try {
+      await changePassword(pool, req.user.id, token(req), req.body);
+      res.clearCookie(cookieName, cookieOptions);
+      res.status(204).end();
+    } catch (error) {
+      if (error instanceof PasswordChangeError)
+        return res.status(error.status).json({ error: error.message });
+      throw error;
+    }
   });
   return service;
 }
