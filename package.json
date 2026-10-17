@@ -16,6 +16,7 @@
     "format": "prettier --write \"backend/src/**/*.js\" \"backend/test/**/*.js\" \"frontend/src/**/*.{ts,tsx,mjs,css}\" \"frontend/test/*.mjs\" \"frontend/vite.config.ts\""
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
     "@eslint/js": "10.0.1",
     "eslint": "10.12.0",
     "globals": "17.13.0",

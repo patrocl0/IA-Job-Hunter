@@ -21,10 +21,10 @@ export function parsePage(query) {
 }
 export function createAnalysisRepository(pool) {
   return {
-    async page(query) {
+    async page(query, userId) {
       const { page, limit, today, status, due } = parsePage(query);
-      const args = [];
-      const filters = [];
+      const args = [userId];
+      const filters = ['user_id=$1'];
       if (status) {
         args.push(status);
         filters.push(`status=$${args.length}`);
@@ -49,8 +49,8 @@ export function createAnalysisRepository(pool) {
         [...args, limit, (current - 1) * limit],
       );
       const { rows: stats } = await pool.query(
-        `SELECT count(*)::int AS total, count(*) FILTER(WHERE status='Postulada')::int AS applied, count(*) FILTER(WHERE status='Entrevista')::int AS interviews, count(*) FILTER(WHERE status='Oferta')::int AS offers, count(*) FILTER(WHERE status NOT IN ('Oferta','Descartada') AND COALESCE(tracking->>'followUpOn','') <> '' AND tracking->>'followUpOn' <= $1)::int AS due FROM analyses`,
-        [today],
+        `SELECT count(*)::int AS total, count(*) FILTER(WHERE status='Postulada')::int AS applied, count(*) FILTER(WHERE status='Entrevista')::int AS interviews, count(*) FILTER(WHERE status='Oferta')::int AS offers, count(*) FILTER(WHERE status NOT IN ('Oferta','Descartada') AND COALESCE(tracking->>'followUpOn','') <> '' AND tracking->>'followUpOn' <= $1)::int AS due FROM analyses WHERE user_id=$2`,
+        [today, userId],
       );
       return { items, total, page: current, pages, stats: stats[0] };
     },

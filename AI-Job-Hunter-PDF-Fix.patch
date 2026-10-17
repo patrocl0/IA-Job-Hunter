@@ -1,0 +1,133 @@
+diff --git a/frontend/src/data/demo/browser-import.ts b/frontend/src/data/demo/browser-import.ts
+index 31827c1..45171e8 100644
+--- a/frontend/src/data/demo/browser-import.ts
++++ b/frontend/src/data/demo/browser-import.ts
+@@ -1,3 +1,4 @@
++import { readCvMessage } from './import-protocol';
+ export async function extractCv(file: File): Promise<{ text: string; warnings: string[] }> {
+   const buffer = await file.arrayBuffer();
+   return new Promise((resolve, reject) => {
+@@ -11,9 +12,15 @@ export async function extractCv(file: File): Promise<{ text: string; warnings: s
+       worker.terminate();
+     };
+     worker.onmessage = (e) => {
+-      cleanup();
+-      if (e.data.error) reject(new Error(e.data.error));
+-      else resolve(e.data);
++      try {
++        const result = readCvMessage(e.data);
++        if (!result) return;
++        cleanup();
++        resolve(result);
++      } catch (error) {
++        cleanup();
++        reject(error);
++      }
+     };
+     worker.onerror = () => {
+       cleanup();
+diff --git a/frontend/src/data/demo/import-protocol.ts b/frontend/src/data/demo/import-protocol.ts
+new file mode 100644
+index 0000000..d2b85c9
+--- /dev/null
++++ b/frontend/src/data/demo/import-protocol.ts
+@@ -0,0 +1,24 @@
++export type ImportedCv = { text: string; warnings: string[] };
++export const CV_RESULT = 'job-hunter:cv-result';
++
++export function validateImportedCv(value: unknown): ImportedCv {
++  const data = value as Partial<ImportedCv> | null;
++  if (
++    !data ||
++    typeof data.text !== 'string' ||
++    !data.text.trim() ||
++    !Array.isArray(data.warnings) ||
++    !data.warnings.every((warning) => typeof warning === 'string')
++  ) {
++    throw new Error('La extracción no devolvió un texto válido. Intenta con otro PDF o DOCX.');
++  }
++  return { text: data.text, warnings: data.warnings };
++}
++
++// PDF.js can emit internal worker messages before the document result.
++export function readCvMessage(value: unknown): ImportedCv | null {
++  const data = value as { type?: string; error?: unknown; result?: unknown } | null;
++  if (!data || data.type !== CV_RESULT) return null;
++  if (typeof data.error === 'string') throw new Error(data.error);
++  return validateImportedCv(data.result);
++}
+diff --git a/frontend/src/data/demo/import-worker.ts b/frontend/src/data/demo/import-worker.ts
+index 23c99dc..2185e4c 100644
+--- a/frontend/src/data/demo/import-worker.ts
++++ b/frontend/src/data/demo/import-worker.ts
+@@ -1,3 +1,4 @@
++import { CV_RESULT } from './import-protocol';
+ import * as pdfjs from 'pdfjs-dist';
+ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+ import mammoth from 'mammoth/mammoth.browser';
+@@ -35,8 +36,11 @@ self.onmessage = async (event: MessageEvent<{ buffer: ArrayBuffer; name: string
+     if (!text)
+       throw new Error('No se encontró texto. Prueba un PDF con texto seleccionable o un DOCX.');
+     if (text.length > 100000) throw new Error('El documento contiene demasiado texto.');
+-    self.postMessage({ text, warnings });
++    self.postMessage({ type: CV_RESULT, result: { text, warnings } });
+   } catch (e) {
+-    self.postMessage({ error: e instanceof Error ? e.message : 'No se pudo leer el documento.' });
++    self.postMessage({
++      type: CV_RESULT,
++      error: e instanceof Error ? e.message : 'No se pudo leer el documento.',
++    });
+   }
+ };
+diff --git a/frontend/src/features/documents/ImportCv.tsx b/frontend/src/features/documents/ImportCv.tsx
+index febe674..e3e953f 100644
+--- a/frontend/src/features/documents/ImportCv.tsx
++++ b/frontend/src/features/documents/ImportCv.tsx
+@@ -1,3 +1,4 @@
++import { validateImportedCv } from '@/data/demo/import-protocol';
+ import { isPublicDemo, requestResponse } from '@/lib/api';
+ import { Button } from '@/components/ui/button';
+ import { Input } from '@/components/ui/input';
+@@ -44,7 +45,7 @@ export function ImportCv({ onUse }: { onUse: (text: string) => boolean }) {
+         if (!response.ok) throw new Error(body.error || 'No se pudo importar el archivo.');
+         data = body;
+       }
+-      setPreview(data);
++      setPreview(validateImportedCv(data));
+     } catch (e) {
+       setError(
+         e instanceof Error && e.name === 'TimeoutError'
+diff --git a/frontend/test/import-protocol.test.mjs b/frontend/test/import-protocol.test.mjs
+new file mode 100644
+index 0000000..45cb740
+--- /dev/null
++++ b/frontend/test/import-protocol.test.mjs
+@@ -0,0 +1,28 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import { CV_RESULT, readCvMessage, validateImportedCv } from '../src/data/demo/import-protocol.ts';
++
++test('PDF.js ready messages are ignored until the actual CV result arrives', () => {
++  const ready = { sourceName: 'worker', targetName: 'main', action: 'ready', data: null };
++  assert.equal(readCvMessage(ready), null);
++  assert.equal(readCvMessage(null), null);
++  const result = { text: 'Experiencia en React y Node.js', warnings: ['Revisa las columnas.'] };
++  assert.deepEqual(readCvMessage({ type: CV_RESULT, result }), result);
++});
++
++test('extraction errors reach the form instead of an undefined preview', () => {
++  assert.throws(
++    () => readCvMessage({ type: CV_RESULT, error: 'No se encontró texto.' }),
++    /No se encontró texto/,
++  );
++  for (const result of [
++    undefined,
++    {},
++    { text: 4, warnings: [] },
++    { text: ' ', warnings: [] },
++    { text: 'CV', warnings: [null] },
++  ]) {
++    assert.throws(() => readCvMessage({ type: CV_RESULT, result }), /texto válido/);
++    assert.throws(() => validateImportedCv(result), /texto válido/);
++  }
++});

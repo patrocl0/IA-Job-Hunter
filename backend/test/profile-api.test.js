@@ -15,6 +15,10 @@ test('HTTP: crear, recuperar, editar, rechazar datos inválidos y eliminar perfi
   };
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = { id: '1' };
+    next();
+  });
   registerProfileRoutes(app, pool);
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));

@@ -32,14 +32,15 @@ export function registerVacancyRoutes(app, pool, service) {
         ? Math.max(1, Number(req.query.page ?? 1))
         : 1;
       const { rows: counts } = await pool.query(
-        'SELECT count(*)::int AS total FROM saved_vacancies',
+        'SELECT count(*)::int AS total FROM saved_vacancies WHERE user_id=$1',
+        [req.user.id],
       );
       const total = counts[0].total;
       const pages = Math.max(1, Math.ceil(total / 12));
       const current = Math.min(page, pages);
       const { rows } = await pool.query(
-        'SELECT * FROM saved_vacancies ORDER BY created_at DESC, source_id DESC LIMIT 12 OFFSET $1',
-        [(current - 1) * 12],
+        'SELECT * FROM saved_vacancies WHERE user_id=$2 ORDER BY created_at DESC, source_id DESC LIMIT 12 OFFSET $1',
+        [(current - 1) * 12, req.user.id],
       );
       res.json({ items: rows, total, page: current, pages });
     }),
@@ -49,7 +50,10 @@ export function registerVacancyRoutes(app, pool, service) {
     handle(async (req, res) => {
       const id = req.body?.id;
       if (!validId(id)) return res.status(400).json({ error: 'Identificador inválido.' });
-      const existing = await pool.query('SELECT * FROM saved_vacancies WHERE source_id=$1', [id]);
+      const existing = await pool.query(
+        'SELECT * FROM saved_vacancies WHERE source_id=$1 AND user_id=$2',
+        [id, req.user.id],
+      );
       if (existing.rows.length) return res.json(existing.rows[0]);
       const snapshot = await service.get();
       const job = snapshot.jobs.find((j) => j.id === id);
@@ -58,9 +62,9 @@ export function registerVacancyRoutes(app, pool, service) {
           .status(404)
           .json({ error: 'La oferta ya no aparece en la fuente. Vuelve a buscar.' });
       const { rows } = await pool.query(
-        `INSERT INTO saved_vacancies(source_id,data) VALUES($1,$2)
-      ON CONFLICT(source_id) DO UPDATE SET source_id=EXCLUDED.source_id RETURNING *`,
-        [id, job],
+        `INSERT INTO saved_vacancies(source_id,data,user_id) VALUES($1,$2,$3)
+      ON CONFLICT(user_id,source_id) DO UPDATE SET source_id=EXCLUDED.source_id RETURNING *`,
+        [id, job, req.user.id],
       );
       res.status(201).json(rows[0]);
     }),
@@ -71,8 +75,8 @@ export function registerVacancyRoutes(app, pool, service) {
       if (!validId(req.params.id) || !statuses.includes(req.body?.status))
         return res.status(400).json({ error: 'Identificador o estado inválido.' });
       const { rows } = await pool.query(
-        'UPDATE saved_vacancies SET status=$1 WHERE source_id=$2 RETURNING *',
-        [req.body.status, req.params.id],
+        'UPDATE saved_vacancies SET status=$1 WHERE source_id=$2 AND user_id=$3 RETURNING *',
+        [req.body.status, req.params.id, req.user.id],
       );
       if (!rows.length) return res.status(404).json({ error: 'Vacante no encontrada.' });
       res.json(rows[0]);
@@ -83,7 +87,10 @@ export function registerVacancyRoutes(app, pool, service) {
     handle(async (req, res) => {
       if (!validId(req.params.id))
         return res.status(400).json({ error: 'Identificador inválido.' });
-      await pool.query('DELETE FROM saved_vacancies WHERE source_id=$1', [req.params.id]);
+      await pool.query('DELETE FROM saved_vacancies WHERE source_id=$1 AND user_id=$2', [
+        req.params.id,
+        req.user.id,
+      ]);
       res.status(204).end();
     }),
   );

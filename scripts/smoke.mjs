@@ -3,9 +3,11 @@ import { readFile } from 'node:fs/promises';
 if (process.env.SMOKE_ALLOW_WRITES !== 'true') {
   throw new Error('Este smoke test requiere una base vacía y modifica datos. Ejecuta en CI o una instalación desechable con SMOKE_ALLOW_WRITES=true.');
 }
+let cookie = '';
 const base = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:8080';
 async function request(path, options, status=200) {
-  const response = await fetch(base+path, { ...options, signal: AbortSignal.timeout(15000) });
+  const response = await fetch(base+path, { ...options, headers: { ...options?.headers, 'X-Job-Hunter':'1', Cookie:cookie }, signal: AbortSignal.timeout(15000) });
+  if (response.headers.has('set-cookie')) cookie=response.headers.get('set-cookie').split(';')[0];
   assert.equal(response.status,status,`${path}: HTTP ${response.status}`);
   return response.status===204 ? null : response.json();
 }
@@ -14,6 +16,8 @@ const home=await fetch(base,{signal:AbortSignal.timeout(15000)});
 assert.equal(home.status,200);assert.match(await home.text(),/AI Job Hunter/);
 assert.equal((await request('/health')).status,'ok');
 assert.equal((await request('/api/config')).mode,'demo','Smoke tests must never consume OpenAI');
+await request('/api/profile',undefined,401);
+await request('/api/auth/register',json('POST',{email:'smoke@example.com',password:'CI only disposable password'}),201);
 const initial=await request('/api/profile');
 assert.equal(initial.profile,null,'Refusing to replace an existing profile. Use an empty database.');
 const before=await request('/api/analyses');assert.equal(before.length,0,'Use an empty database.');
@@ -51,4 +55,6 @@ try {
 } finally {
   if(analysisId) await request('/api/analyses/'+analysisId,json('DELETE',{}),204);
   await request('/api/profile',json('DELETE',{}),204);
+  await request('/api/auth/logout',json('POST',{}),204);
+  await request('/api/profile',undefined,401);
 }

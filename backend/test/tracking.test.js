@@ -56,6 +56,10 @@ test('HTTP tracking: partial edits preserve status and fields, due query precede
   };
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = { id: '1' };
+    next();
+  });
   registerTrackingRoutes(app, pool);
   const server = app.listen(0, '127.0.0.1');
   await new Promise((r) => server.once('listening', r));
@@ -89,8 +93,8 @@ test('HTTP tracking: partial edits preserve status and fields, due query precede
     assert.equal((await patch({ status: 'Oferta' }, '99999999999999999999')).status, 400);
     assert.equal((await fetch(base + '/api/analyses?followUp=due&today=2026-02-30')).status, 400);
     assert.equal((await fetch(base + '/api/analyses?followUp=due&today=2026-10-16')).status, 200);
-    assert.deepEqual(lastQuery.args, ['2026-10-16']);
-    assert.match(lastQuery.sql, /WHERE.*NOT IN.*<= \$1 ORDER BY.*LIMIT 100/);
+    assert.deepEqual(lastQuery.args, ['1', '2026-10-16']);
+    assert.match(lastQuery.sql, /WHERE.*NOT IN.*<= \$2 ORDER BY.*LIMIT 100/);
   } finally {
     await new Promise((r) => server.close(r));
   }

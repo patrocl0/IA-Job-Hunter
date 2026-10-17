@@ -1,3 +1,7 @@
+# Actualización de autenticación
+
+La entrega de cuentas incorpora pruebas HTTP con SQL real en PGlite, migración de datos anteriores y aislamiento entre usuarios. Consulta [CUENTAS-Y-SESIONES.md](CUENTAS-Y-SESIONES.md). Las cifras y ejecuciones de la sección siguiente pertenecen a la entrega anterior. El nuevo CI con PostgreSQL/Nginx debe ejecutarse tras subir la rama.
+
 # Validación: arquitectura y diseño
 
 | Comprobación | Resultado |

@@ -43,14 +43,14 @@ export function validateTracking(input) {
 }
 export function registerTrackingRoutes(app, pool) {
   app.get('/api/analyses', async (req, res) => {
-    let sql = 'SELECT * FROM analyses';
-    const args = [];
+    let sql = 'SELECT * FROM analyses WHERE user_id=$1';
+    const args = [req.user.id];
     if (req.query.followUp !== undefined) {
       if (req.query.followUp !== 'due' || !validDate(req.query.today))
         return res.status(400).json({ error: 'Filtro o fecha inválidos.' });
       // ISO calendar dates, not timestamps: the browser supplies its local day.
       sql +=
-        " WHERE status NOT IN ('Oferta','Descartada') AND COALESCE(tracking->>'followUpOn','') <> '' AND tracking->>'followUpOn' <= $1 ORDER BY tracking->>'followUpOn' ASC, id DESC LIMIT 100";
+        " AND status NOT IN ('Oferta','Descartada') AND COALESCE(tracking->>'followUpOn','') <> '' AND tracking->>'followUpOn' <= $2 ORDER BY tracking->>'followUpOn' ASC, id DESC LIMIT 100";
       args.push(req.query.today);
     } else sql += ' ORDER BY created_at DESC, id DESC LIMIT 100';
     res.json((await pool.query(sql, args)).rows);
@@ -75,8 +75,8 @@ export function registerTrackingRoutes(app, pool) {
       return res.status(400).json({ error: error.message });
     }
     const { rows } = await pool.query(
-      'UPDATE analyses SET status=COALESCE($1::text,status), tracking=tracking || $2::jsonb WHERE id=$3 RETURNING *',
-      [req.body.status ?? null, JSON.stringify(tracking), req.params.id],
+      'UPDATE analyses SET status=COALESCE($1::text,status), tracking=tracking || $2::jsonb WHERE id=$3 AND user_id=$4 RETURNING *',
+      [req.body.status ?? null, JSON.stringify(tracking), req.params.id, req.user.id],
     );
     if (!rows.length) return res.status(404).json({ error: 'Análisis no encontrado.' });
     res.json(rows[0]);

@@ -21,8 +21,8 @@ export function registerAnalysisRoutes(app, pool, config, analyzer = analyze) {
       const result = await analyzer(input, config);
       // Store the result, not the original CV or full vacancy.
       const { rows } = await pool.query(
-        'INSERT INTO analyses(title,result,tracking) VALUES($1,$2,$3) RETURNING *',
-        [input.title, result, tracking],
+        'INSERT INTO analyses(title,result,tracking,user_id) VALUES($1,$2,$3,$4) RETURNING *',
+        [input.title, result, tracking, req.user.id],
       );
       res.status(201).json(rows[0]);
     } catch (error) {
@@ -48,7 +48,10 @@ export function registerAnalysisRoutes(app, pool, config, analyzer = analyze) {
   app.delete('/api/analyses/:id', async (req, res) => {
     if (!/^\d+$/.test(req.params.id))
       return res.status(400).json({ error: 'Identificador inválido.' });
-    const result = await pool.query('DELETE FROM analyses WHERE id=$1', [req.params.id]);
+    const result = await pool.query('DELETE FROM analyses WHERE id=$1 AND user_id=$2', [
+      req.params.id,
+      req.user.id,
+    ]);
     if (!result.rowCount) return res.status(404).json({ error: 'Análisis no encontrado.' });
     res.status(204).end();
   });

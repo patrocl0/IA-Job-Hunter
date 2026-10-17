@@ -148,6 +148,10 @@ test('HTTP: guarda solo ofertas de la fuente, deduplica y conserva el estado', a
   };
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = { id: '1' };
+    next();
+  });
   registerVacancyRoutes(app, pool, {
     get: async () => ({
       jobs: [normalizeJob(raw(1))],
