@@ -1,3 +1,4 @@
+import { readCvMessage } from './import-protocol';
 export async function extractCv(file: File): Promise<{ text: string; warnings: string[] }> {
   const buffer = await file.arrayBuffer();
   return new Promise((resolve, reject) => {
@@ -11,9 +12,15 @@ export async function extractCv(file: File): Promise<{ text: string; warnings: s
       worker.terminate();
     };
     worker.onmessage = (e) => {
-      cleanup();
-      if (e.data.error) reject(new Error(e.data.error));
-      else resolve(e.data);
+      try {
+        const result = readCvMessage(e.data);
+        if (!result) return;
+        cleanup();
+        resolve(result);
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
     };
     worker.onerror = () => {
       cleanup();

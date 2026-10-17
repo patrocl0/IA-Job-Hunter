@@ -1,3 +1,4 @@
+import { CV_RESULT } from './import-protocol';
 import * as pdfjs from 'pdfjs-dist';
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import mammoth from 'mammoth/mammoth.browser';
@@ -35,8 +36,11 @@ self.onmessage = async (event: MessageEvent<{ buffer: ArrayBuffer; name: string 
     if (!text)
       throw new Error('No se encontró texto. Prueba un PDF con texto seleccionable o un DOCX.');
     if (text.length > 100000) throw new Error('El documento contiene demasiado texto.');
-    self.postMessage({ text, warnings });
+    self.postMessage({ type: CV_RESULT, result: { text, warnings } });
   } catch (e) {
-    self.postMessage({ error: e instanceof Error ? e.message : 'No se pudo leer el documento.' });
+    self.postMessage({
+      type: CV_RESULT,
+      error: e instanceof Error ? e.message : 'No se pudo leer el documento.',
+    });
   }
 };
