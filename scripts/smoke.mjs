@@ -1,4 +1,3 @@
-cat > (scripts / smoke.mjs) << 'EOF';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
@@ -175,4 +174,3 @@ try {
   await request('/api/auth/logout', json('POST', {}), 204);
   await request('/api/profile', undefined, 401);
 }
-EOF;
