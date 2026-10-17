@@ -12,7 +12,15 @@ import { AnalysisForm, type Draft } from '@/features/analyses/AnalysisForm';
 import { Applications } from '@/features/analyses/Applications';
 import { useAnalyses } from '@/features/analyses/useAnalyses';
 import type { Analysis } from '@/features/analyses/types';
-export default function App() {
+export default function App({
+  accountEmail,
+  onLogout,
+  logoutBusy,
+}: {
+  accountEmail?: string;
+  onLogout?: () => void;
+  logoutBusy?: boolean;
+}) {
   const [page, setPage] = useState<Page>('overview'),
     [mobile, setMobile] = useState(false),
     [mode, setMode] = useState(''),
@@ -61,16 +69,23 @@ export default function App() {
               {navigation.find((n) => n.id === page)?.title}
             </span>
           </div>
-          <Badge variant="outline" className="gap-2 rounded-full px-3 py-1.5">
-            <span
-              className={'size-1.5 rounded-full ' + (mode ? 'bg-emerald-500' : 'bg-amber-400')}
-            />
-            {mode === 'openai'
-              ? 'IA conectada'
-              : mode === 'demo'
-                ? 'Modo demostración'
-                : 'Conectando…'}
-          </Badge>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {onLogout && (
+              <Button variant="ghost" size="sm" disabled={logoutBusy} onClick={onLogout}>
+                Cerrar sesión
+              </Button>
+            )}
+            <Badge variant="outline" className="gap-2 rounded-full px-3 py-1.5">
+              <span
+                className={'size-1.5 rounded-full ' + (mode ? 'bg-emerald-500' : 'bg-amber-400')}
+              />
+              {mode === 'openai'
+                ? 'IA conectada'
+                : mode === 'demo'
+                  ? 'Modo demostración'
+                  : 'Conectando…'}
+            </Badge>
+          </div>
         </header>
         <main id="main" className="mx-auto max-w-[1500px] px-5 py-8 md:px-9 md:py-10">
           {isPublicDemo && (
@@ -188,7 +203,7 @@ export default function App() {
           <footer className="mt-12 flex flex-wrap justify-between gap-3 border-t pt-6 text-xs text-muted-foreground">
             <span>AI Job Hunter · Construye tu siguiente oportunidad.</span>
             <span>
-              {isPublicDemo ? 'Demo pública · sin IA' : 'Espacio local · un solo usuario'}
+              {isPublicDemo ? 'Demo pública · sin IA' : `Sesión de ${accountEmail ?? ''}`}
             </span>
           </footer>
         </main>

@@ -1,5 +1,10 @@
 # AI Job Hunter
 
+## Actualización: cuentas y sesiones
+
+La instalación local ahora requiere iniciar sesión. El registro está cerrado por defecto y se puede habilitar con `ALLOW_REGISTRATION=true`. Los datos anteriores se reservan para una cuenta propietaria que se activa desde la terminal. **Lee [la guía de cuentas y actualización](docs/CUENTAS-Y-SESIONES.md) antes de reconstruir los contenedores.** La demo pública continúa sin cuentas reales.
+
+
 **Un espacio para organizar la búsqueda de empleo: del CV a la postulación.**
 
 Aplicación full stack local que reúne un perfil profesional reutilizable, importación de CV en PDF/DOCX, búsqueda de vacantes remotas y seguimiento de oportunidades. Incluye un modo demo sin consumo de IA y una integración opcional con OpenAI para comparar un CV con una vacante.
@@ -139,7 +144,7 @@ El script abre la compilación real en un servidor temporal, intercepta las llam
 
 ## Límites actuales
 
-- Aplicación local de un solo usuario, expuesta en `127.0.0.1`; sin autenticación. Antes de desplegar requiere controles de acceso, HTTPS y aislamiento de datos.
+- Aplicación local expuesta en `127.0.0.1`, con cuentas, sesiones y datos separados por usuario. Registro cerrado por defecto. Antes de publicarla como servicio requiere HTTPS, recuperación y verificación por correo, gestión de abuso y pruebas de carga; consulta la guía de cuentas.
 - PDF/DOCX hasta 5 MiB; PDF hasta 30 páginas. Los documentos escaneados necesitan OCR, todavía no incluido.
 - CV y vacante hasta 16.000 caracteres. El orden de columnas o tablas puede requerir correcciones manuales.
 - Remotive ofrece un catálogo parcial con retraso de publicación; la aplicación conserva una copia hasta seis horas entre consultas. Verifica vigencia y ubicación en la oferta original.

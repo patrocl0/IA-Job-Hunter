@@ -11,7 +11,17 @@ export async function requestResponse(url: string, init?: RequestInit): Promise<
     }
     return demoRequest(url, init);
   }
-  return fetch(url, { ...init, signal: init?.signal ?? AbortSignal.timeout(65000) });
+  const headers = new Headers(init?.headers);
+  headers.set('X-Job-Hunter', '1');
+  const response = await fetch(url, {
+    ...init,
+    headers,
+    credentials: 'same-origin',
+    signal: init?.signal ?? AbortSignal.timeout(65000),
+  });
+  if (response.status === 401 && !url.startsWith('/api/auth/'))
+    window.dispatchEvent(new Event('jobhunter:session-expired'));
+  return response;
 }
 export async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await requestResponse(url, {

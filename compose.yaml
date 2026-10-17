@@ -21,6 +21,8 @@ services:
       PGDATABASE: jobhunter
       PGUSER: jobhunter
       PGPASSWORD: ${POSTGRES_PASSWORD:?Configura POSTGRES_PASSWORD}
+      APP_ORIGIN: ${APP_ORIGIN:-http://localhost:8080}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
       AI_MODE: ${AI_MODE:-demo}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-}

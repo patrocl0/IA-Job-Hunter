@@ -1,3 +1,7 @@
+# Estado actualizado
+
+La separación inicial descrita aquí se amplía con cuentas y sesiones. Consulta [CUENTAS-Y-SESIONES.md](CUENTAS-Y-SESIONES.md) para la migración 3, autenticación, aislamiento de datos, instalación y límites actuales. Las referencias siguientes a un solo usuario describen la etapa anterior.
+
 # AI Job Hunter: arquitectura y rediseño
 
 ## Resultado y alcance

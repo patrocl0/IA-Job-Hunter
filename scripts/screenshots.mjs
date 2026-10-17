@@ -28,6 +28,7 @@ try {
   await page.route('**/api/**',async route=>{
     const request=route.request(),url=new URL(request.url());let body;let status=200;
     if(url.pathname==='/api/config')body={mode:'demo'};
+    else if(url.pathname==='/api/auth/session')body={user:{id:'1',email:'demo@example.com'},registration:false};
     else if(url.pathname==='/api/profile')body={profile,cvText,updatedAt:'2026-10-15T15:00:00Z'};
     else if(url.pathname==='/api/analyses/page')body={items:[],total:0,page:1,pages:1,stats:{total:0,applied:0,interviews:0,offers:0,due:0}};
     else if(url.pathname==='/api/vacancies')body={jobs,total:jobs.length,page:1,pages:1,fetchedAt:'2026-10-15T15:00:00Z',stale:false,nextRefreshAt:'2026-10-15T21:00:00Z'};

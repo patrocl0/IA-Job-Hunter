@@ -11,7 +11,9 @@ test('Migrations are serialized, skip applied versions and roll back on failure'
       calls.push(sql);
       return {
         rows:
-          sql === 'SELECT version FROM schema_migrations' ? [{ version: 1 }, { version: 2 }] : [],
+          sql === 'SELECT version FROM schema_migrations'
+            ? [{ version: 1 }, { version: 2 }, { version: 3 }]
+            : [],
       };
     },
     release() {
@@ -50,17 +52,20 @@ test('Page queries validate inputs and parameterize filters before limits', asyn
       return { rows: [{ total: 99, applied: 3, interviews: 1, offers: 0, due: 2 }] };
     },
   });
-  const result = await repo.page({
-    today: '2026-10-16',
-    page: '2',
-    limit: '20',
-    status: 'Entrevista',
-    followUp: 'due',
-  });
+  const result = await repo.page(
+    {
+      today: '2026-10-16',
+      page: '2',
+      limit: '20',
+      status: 'Entrevista',
+      followUp: 'due',
+    },
+    '7',
+  );
   assert.equal(result.pages, 3);
   assert.equal(result.stats.total, 99);
-  assert.deepEqual(calls[1].args, ['Entrevista', '2026-10-16', 20, 20]);
-  assert.match(calls[1].sql, /LIMIT \$3 OFFSET \$4/);
+  assert.deepEqual(calls[1].args, ['7', 'Entrevista', '2026-10-16', 20, 20]);
+  assert.match(calls[1].sql, /LIMIT \$4 OFFSET \$5/);
 });
 test('App factory starts without database side effects and reports health failures', async () => {
   const app = createApp({
@@ -80,7 +85,7 @@ test('App factory starts without database side effects and reports health failur
     assert.equal((await config.json()).mode, 'demo');
     assert.ok(config.headers.get('x-request-id'));
     assert.equal((await fetch(base + '/health')).status, 503);
-    assert.equal((await fetch(base + '/api/analyses/page?today=invalid')).status, 400);
+    assert.equal((await fetch(base + '/api/analyses/page?today=invalid')).status, 401);
   } finally {
     await new Promise((r) => server.close(r));
   }

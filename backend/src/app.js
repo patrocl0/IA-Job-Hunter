@@ -1,3 +1,4 @@
+import { registerAuth } from './modules/auth/routes.js';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
 import { requestGuard } from './http/request-guard.js';
@@ -6,7 +7,7 @@ import { registerImportRoutes } from './modules/documents/import-cv.js';
 import { registerVacancyRoutes } from './modules/vacancies/vacancies.js';
 import { registerAnalysisRoutes } from './modules/analyses/routes.js';
 import { createAnalysisRepository, parsePage } from './modules/analyses/repository.js';
-export function createApp({ pool, config, vacancies, analyzer }) {
+export function createApp({ pool, config, vacancies, analyzer, authConfig }) {
   const app = express();
   app.disable('x-powered-by');
   app.use((req, res, next) => {
@@ -27,6 +28,7 @@ export function createApp({ pool, config, vacancies, analyzer }) {
     }
   });
   app.get('/api/config', (_req, res) => res.json({ mode: config.mode }));
+  registerAuth(app, pool, authConfig);
   const analyses = createAnalysisRepository(pool);
   app.get('/api/analyses/page', async (req, res) => {
     try {
@@ -34,7 +36,7 @@ export function createApp({ pool, config, vacancies, analyzer }) {
     } catch (error) {
       return res.status(400).json({ error: error.message });
     }
-    res.json(await analyses.page(req.query));
+    res.json(await analyses.page(req.query, req.user.id));
   });
   registerAnalysisRoutes(app, pool, config, analyzer);
   registerProfileRoutes(app, pool);
