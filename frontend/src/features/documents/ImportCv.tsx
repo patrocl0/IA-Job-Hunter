@@ -1,3 +1,4 @@
+import { validateImportedCv } from '@/data/demo/import-protocol';
 import { isPublicDemo, requestResponse } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,7 +45,7 @@ export function ImportCv({ onUse }: { onUse: (text: string) => boolean }) {
         if (!response.ok) throw new Error(body.error || 'No se pudo importar el archivo.');
         data = body;
       }
-      setPreview(data);
+      setPreview(validateImportedCv(data));
     } catch (e) {
       setError(
         e instanceof Error && e.name === 'TimeoutError'
