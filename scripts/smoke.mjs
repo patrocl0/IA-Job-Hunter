@@ -140,6 +140,17 @@ try {
   assert.equal(filtered.stats.total, 1);
   assert.equal((await request('/api/vacancies/saved')).total, 0);
 
+  const csv = await fetch(base + '/api/analyses/export?today=2026-10-17&status=Entrevista', {
+    headers: { Cookie: cookie },
+    signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(csv.status, 200);
+  assert.match(csv.headers.get('content-type'), /text\/csv/);
+  assert.equal(csv.headers.get('x-export-count'), '1');
+  const csvText = await csv.text();
+  assert.ok(csvText.includes('Nota CI de seguimiento'));
+  assert.ok(csvText.includes('Vacante de prueba CI'));
+
   const priorCookie = cookie;
 
   await request(
@@ -164,7 +175,7 @@ try {
   assert.equal((await request('/api/profile')).profile.name, profile.name);
 
   console.log(
-    'Smoke OK: UI, salud, perfil, importación DOCX, análisis demo, seguimiento y cambio de contraseña.',
+    'Smoke OK: UI, salud, perfil, importación DOCX, análisis demo, seguimiento, exportación CSV y cambio de contraseña.',
   );
 } finally {
   if (analysisId) {

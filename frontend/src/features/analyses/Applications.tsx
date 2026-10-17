@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { downloadCsv } from './downloadCsv';
+import { useEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight,
+  Download,
   CalendarClock,
   ChevronLeft,
   ChevronRight,
@@ -36,6 +38,24 @@ export function Applications({
     [notice, setNotice] = useState(''),
     [error, setError] = useState('');
   const { data, loading, busy } = model;
+  const [exporting, setExporting] = useState(false);
+  const exportRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => exportRequest.current?.abort(), []);
+  async function exportCsv() {
+    const controller = new AbortController();
+    exportRequest.current = controller;
+    setExporting(true);
+    setError('');
+    setNotice('');
+    try {
+      const count = await downloadCsv(model.status, model.due, controller.signal);
+      setNotice(`CSV preparado: ${count} registros. Revisa las descargas de tu navegador.`);
+    } catch (error) {
+      if (!controller.signal.aborted) setError((error as Error).message);
+    } finally {
+      if (!controller.signal.aborted) setExporting(false);
+    }
+  }
   async function update(item: Analysis, status: string) {
     setError('');
     try {
@@ -65,16 +85,26 @@ export function Applications({
             <div>
               <h2 className="font-semibold">Tus oportunidades</h2>
               <p className="mt-1 text-sm text-muted-foreground">
-                {data?.total ?? 0} registros en esta vista
+                {data?.total ?? 0} registros en esta vista · El CSV incluye todas las páginas.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
+              <Button
+                variant="outline"
+                disabled={
+                  exporting || loading || busy || !!editing || !!model.error || !data?.total
+                }
+                onClick={() => void exportCsv()}
+              >
+                <Download size={16} />
+                {exporting ? 'Exportando…' : 'Exportar CSV'}
+              </Button>
               <label className="sr-only" htmlFor="status-filter">
                 Filtrar por estado
               </label>
               <select
                 id="status-filter"
-                disabled={!!editing || loading || busy}
+                disabled={!!editing || loading || busy || exporting}
                 value={model.status}
                 onChange={(e) => model.filterStatus(e.target.value)}
               >
@@ -86,7 +116,7 @@ export function Applications({
                 variant="outline"
                 size="icon"
                 aria-label="Actualizar lista"
-                disabled={loading || busy || !!editing}
+                disabled={loading || busy || !!editing || exporting}
                 onClick={() => void model.reload()}
               >
                 <RefreshCw size={16} />
@@ -98,7 +128,7 @@ export function Applications({
               <input
                 type="checkbox"
                 checked={model.due}
-                disabled={loading || busy || !!editing}
+                disabled={loading || busy || !!editing || exporting}
                 onChange={(e) => model.filterDue(e.target.checked)}
               />
               Seguimiento pendiente

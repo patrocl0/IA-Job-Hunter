@@ -1,5 +1,7 @@
 # AI Job Hunter
 
+**Exportación CSV:** en Postulaciones puedes descargar todos los registros de los filtros actuales. Consulta [instalación y formato](docs/EXPORTAR-CSV.md).
+
 **Cambio de contraseña y recuperación local:** consulta [la guía de contraseñas](docs/CONTRASENAS.md) para instalar esta actualización y recuperar el acceso desde la terminal. No requiere cambios de `.env` ni una nueva migración de base de datos.
 
 ## Actualización: cuentas y sesiones

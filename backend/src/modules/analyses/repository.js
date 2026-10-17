@@ -19,23 +19,36 @@ export function parsePage(query) {
   if (query.followUp !== undefined && query.followUp !== 'due') throw new Error('Filtro inválido.');
   return { page, limit, today: query.today, status: query.status, due: query.followUp === 'due' };
 }
+function analysisFilter({ status, due, today }, userId) {
+  const args = [userId];
+  const filters = ['user_id=$1'];
+  if (status) {
+    args.push(status);
+    filters.push(`status=$${args.length}`);
+  }
+  if (due) {
+    args.push(today);
+    filters.push(
+      `status NOT IN ('Oferta','Descartada') AND COALESCE(tracking->>'followUpOn','') <> '' AND tracking->>'followUpOn' <= $${args.length}`,
+    );
+  }
+  const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '';
+  const ordering = due ? "tracking->>'followUpOn' ASC, id DESC" : 'created_at DESC, id DESC';
+  return { args, where, ordering };
+}
 export function createAnalysisRepository(pool) {
   return {
+    async exportRows(query, userId, limit) {
+      const { args, where, ordering } = analysisFilter(parsePage(query), userId);
+      const { rows } = await pool.query(
+        `SELECT id,title,status,created_at,tracking,jsonb_build_object('mode',result->'mode','score',result->'score') AS result FROM analyses${where} ORDER BY ${ordering} LIMIT $${args.length + 1}`,
+        [...args, limit + 1],
+      );
+      return rows;
+    },
     async page(query, userId) {
       const { page, limit, today, status, due } = parsePage(query);
-      const args = [userId];
-      const filters = ['user_id=$1'];
-      if (status) {
-        args.push(status);
-        filters.push(`status=$${args.length}`);
-      }
-      if (due) {
-        args.push(today);
-        filters.push(
-          `status NOT IN ('Oferta','Descartada') AND COALESCE(tracking->>'followUpOn','') <> '' AND tracking->>'followUpOn' <= $${args.length}`,
-        );
-      }
-      const where = filters.length ? ' WHERE ' + filters.join(' AND ') : '';
+      const { args, where, ordering } = analysisFilter({ status, due, today }, userId);
       const { rows: count } = await pool.query(
         'SELECT count(*)::int AS total FROM analyses' + where,
         args,
@@ -43,7 +56,6 @@ export function createAnalysisRepository(pool) {
       const total = count[0].total,
         pages = Math.max(1, Math.ceil(total / limit)),
         current = Math.min(page, pages);
-      const ordering = due ? "tracking->>'followUpOn' ASC, id DESC" : 'created_at DESC, id DESC';
       const { rows: items } = await pool.query(
         `SELECT * FROM analyses${where} ORDER BY ${ordering} LIMIT $${args.length + 1} OFFSET $${args.length + 2}`,
         [...args, limit, (current - 1) * limit],

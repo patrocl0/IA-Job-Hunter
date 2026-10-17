@@ -4,6 +4,7 @@ COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
 RUN npm ci --workspace frontend --no-audit --no-fund
+COPY shared/ shared/
 COPY frontend/ frontend/
 RUN npm run build --workspace frontend
 FROM nginx:1.28-alpine

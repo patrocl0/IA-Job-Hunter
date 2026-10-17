@@ -4,6 +4,7 @@ COPY package.json package-lock.json ./
 COPY backend/package.json backend/package.json
 COPY frontend/package.json frontend/package.json
 RUN npm ci --workspace backend --omit=dev --no-audit --no-fund
+COPY shared/ shared/
 COPY backend/src backend/src
 USER node
 EXPOSE 3000

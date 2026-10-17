@@ -1,3 +1,4 @@
+import { analysesCsv, EXPORT_LIMIT } from '../../shared/analyses-csv.mjs';
 import { registerAuth } from './modules/auth/routes.js';
 import express from 'express';
 import { randomUUID } from 'node:crypto';
@@ -30,6 +31,26 @@ export function createApp({ pool, config, vacancies, analyzer, authConfig }) {
   app.get('/api/config', (_req, res) => res.json({ mode: config.mode }));
   registerAuth(app, pool, authConfig);
   const analyses = createAnalysisRepository(pool);
+  app.get('/api/analyses/export', async (req, res) => {
+    try {
+      if (Object.keys(req.query).some((key) => !['today', 'status', 'followUp'].includes(key)))
+        throw new Error('Filtros de exportación inválidos.');
+      parsePage(req.query);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+    const rows = await analyses.exportRows(req.query, req.user.id, EXPORT_LIMIT);
+    if (rows.length > EXPORT_LIMIT)
+      return res
+        .status(413)
+        .json({
+          error: `La exportación supera ${EXPORT_LIMIT} registros. Aplica filtros; no se ha generado un archivo parcial.`,
+        });
+    res.set('Content-Type', 'text/csv; charset=utf-8');
+    res.set('Content-Disposition', `attachment; filename="postulaciones-${req.query.today}.csv"`);
+    res.set('X-Export-Count', String(rows.length));
+    res.send(analysesCsv(rows));
+  });
   app.get('/api/analyses/page', async (req, res) => {
     try {
       parsePage(req.query);
