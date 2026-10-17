@@ -1,3 +1,4 @@
+import { analysesCsv, EXPORT_LIMIT } from '../../../../shared/analyses-csv.mjs';
 import { validateTracking, validDate } from './tracking-validation.mjs';
 export const STORAGE_KEY = 'ai-job-hunter-demo:v1';
 export const sampleProfile = {
@@ -192,6 +193,38 @@ export function createDemoApi(storage) {
           );
         }
         return json({ items: state.saved, total: state.saved.length, page: 1, pages: 1 });
+      }
+      if (pathname === '/api/analyses/export' && method === 'GET') {
+        const today = searchParams.get('today'),
+          status = searchParams.get('status'),
+          followUp = searchParams.get('followUp');
+        if (
+          !validDate(today) ||
+          (status !== null && !statuses.includes(status)) ||
+          (followUp !== null && followUp !== 'due') ||
+          [...searchParams.keys()].some((key) => !['today', 'status', 'followUp'].includes(key)) ||
+          [...new Set(searchParams.keys())].some((key) => searchParams.getAll(key).length !== 1)
+        )
+          return json({ error: 'Filtros de exportación inválidos.' }, 400);
+        const items = state.analyses.filter(
+          (item) =>
+            (!status || item.status === status) &&
+            (!followUp ||
+              (item.tracking?.followUpOn &&
+                item.tracking.followUpOn <= today &&
+                !['Oferta', 'Descartada'].includes(item.status))),
+        );
+        if (followUp)
+          items.sort((a, b) => a.tracking.followUpOn.localeCompare(b.tracking.followUpOn));
+        if (items.length > EXPORT_LIMIT)
+          return json({ error: 'Demasiados registros. Aplica filtros.' }, 413);
+        return new Response(analysesCsv(items), {
+          headers: {
+            'Content-Type': 'text/csv; charset=utf-8',
+            'Content-Disposition': `attachment; filename="postulaciones-demo-${today}.csv"`,
+            'X-Export-Count': String(items.length),
+          },
+        });
       }
       if (pathname === '/api/analyses/page') {
         const today = searchParams.get('today');

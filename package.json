@@ -13,7 +13,7 @@
     "smoke": "node scripts/smoke.mjs",
     "screenshots": "npm run build && node scripts/screenshots.mjs",
     "build:demo": "npm run build:demo --workspace frontend",
-    "format": "prettier --write \"backend/src/**/*.js\" \"backend/test/**/*.js\" \"frontend/src/**/*.{ts,tsx,mjs,css}\" \"frontend/test/*.mjs\" \"frontend/vite.config.ts\""
+    "format": "prettier --write \"backend/src/**/*.js\" \"backend/test/**/*.js\" \"frontend/src/**/*.{ts,tsx,mjs,css}\" \"frontend/test/*.mjs\" \"frontend/vite.config.ts\" \"shared/**/*.mjs\""
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.10",

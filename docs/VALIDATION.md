@@ -1,3 +1,7 @@
+# Exportación CSV
+
+45 pruebas aprobadas (35 backend, 10 frontend), lint y compilaciones local/demo. Las pruebas de exportación incluyen aislamiento, formato, filtros y rechazo de truncamiento. Detalles y límites en [EXPORTAR-CSV.md](EXPORTAR-CSV.md). Falta validación visual, apertura en hoja de cálculo y el nuevo CI con Docker/PostgreSQL.
+
 # Cambio y recuperación de contraseña
 
 33 pruebas de backend y 9 de frontend aprobadas; lint y ambas compilaciones correctos. Las pruebas nuevas cubren cambio HTTP, recuperación local, revocación de sesiones y rollback. El smoke de Docker se amplió y debe ejecutarse en el CI nuevo. Detalles en [CONTRASENAS.md](CONTRASENAS.md). No se realizó revisión visual en navegador en esta entrega.
